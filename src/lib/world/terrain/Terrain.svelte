@@ -1,18 +1,25 @@
 <script lang="ts">
-  import { T, useTask } from '@threlte/core'
+  import { T } from '@threlte/core'
   import {
     AdditiveBlending,
     CircleGeometry,
-    Color,
     DoubleSide,
     MeshBasicMaterial,
-    ShaderMaterial,
     SphereGeometry,
   } from 'three'
   import { completedDiscoveries, dusk } from '../worldState'
-  import { landmarks, roadPaths, terrainHeight } from '../data/sunmereVale'
-  import { createRiverGeometry, createRoadGeometry, createTerrainGeometry } from './geometry'
+  import {
+    landmarks,
+    landmarkWorldPosition,
+    roadPaths,
+    terrainHeight,
+    WHISPERING_ASCENT,
+    walkHeight,
+  } from '../data/sunmereVale'
+  import { createRoadGeometry, createTerrainGeometry } from './geometry'
   import WorldModel from '../environment/WorldModel.svelte'
+  import AscentStructure from '../environment/AscentStructure.svelte'
+  import StairMist from '../atmosphere/StairMist.svelte'
   import { gbaToonGradient } from '../render/retroPalette'
 
   const terrainGeometry = createTerrainGeometry()
@@ -20,52 +27,6 @@
     id: `road-${index}`,
     geometry: createRoadGeometry(path, index === 0 ? 1.5 : 1.08),
   }))
-
-  const riverBankGeometry = createRiverGeometry(7.4, -0.56)
-  const waterGeometry = createRiverGeometry(5.35, -0.43)
-  const waterMaterial = new ShaderMaterial({
-    transparent: true,
-    depthWrite: false,
-    uniforms: {
-      uTime: { value: 0 },
-      uDeep: { value: new Color('#2f6975') },
-      uShallow: { value: new Color('#68a9a5') },
-    },
-    vertexShader: `
-      varying vec2 vUv;
-      varying float vWave;
-      uniform float uTime;
-      void main() {
-        vUv = uv;
-        vec3 p = position;
-        vWave = sin(p.x * .42 + uTime * 1.35) * .5 + sin(p.x * .16 - uTime * .7) * .5;
-        p.y += floor(vWave * 4.0) * .014;
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
-      }
-    `,
-    fragmentShader: `
-      varying vec2 vUv;
-      varying float vWave;
-      uniform vec3 uDeep;
-      uniform vec3 uShallow;
-      float bayer2(vec2 pixel) {
-        vec2 p = mod(floor(pixel), 2.0);
-        return (p.x + p.y * 2.0 == 0.0) ? 0.0 :
-               (p.x + p.y * 2.0 == 1.0) ? 0.5 :
-               (p.x + p.y * 2.0 == 2.0) ? 0.75 : 0.25;
-      }
-      void main() {
-        float ribbons = smoothstep(.77, .97, sin((vUv.x * 1.35) + vWave * 2.0) * .5 + .5);
-        float edge = min(vUv.y, 1.0 - vUv.y);
-        float foam = (1.0 - smoothstep(0.025, 0.16, edge)) * (0.48 + ribbons * 0.42);
-        vec3 color = mix(uDeep, uShallow, .28 + vUv.y * .4 + ribbons * .2);
-        color = mix(color, vec3(0.91, 0.87, 0.67), foam);
-        float dither = bayer2(gl_FragCoord.xy) - 0.5;
-        color = floor(clamp(color + dither / 18.0, 0.0, 1.0) * 12.0) / 12.0;
-        gl_FragColor = vec4(color, .86);
-      }
-    `,
-  })
 
   const glowGeometry = new SphereGeometry(0.34, 12, 8)
   const glowMaterial = new MeshBasicMaterial({
@@ -75,10 +36,8 @@
     blending: AdditiveBlending,
   })
   const ringGeometry = new CircleGeometry(1.7, 48)
-
-  useTask((delta) => {
-    waterMaterial.uniforms.uTime.value += delta
-  })
+  const landingRing = new CircleGeometry(2.05, 40)
+  const landingY = walkHeight(WHISPERING_ASCENT.landingX, WHISPERING_ASCENT.landingZ) + 0.06
 </script>
 
 <T.Mesh geometry={terrainGeometry} receiveShadow>
@@ -98,15 +57,17 @@
   </T.Mesh>
 {/each}
 
-<T.Mesh geometry={riverBankGeometry} receiveShadow renderOrder={0}>
-  <T.MeshToonMaterial color="#827957" gradientMap={gbaToonGradient} />
-</T.Mesh>
+<!-- Open procedural stone treads, risers, and low side curbs. -->
+<AscentStructure />
 
 <T.Mesh
-  geometry={waterGeometry}
-  material={waterMaterial}
-  renderOrder={1}
-/>
+  geometry={landingRing}
+  position={[WHISPERING_ASCENT.landingX, landingY, WHISPERING_ASCENT.landingZ]}
+  rotation={[-Math.PI / 2, 0, 0]}
+  renderOrder={2}
+>
+  <T.MeshBasicMaterial color="#6f8a5c" transparent opacity={0.42} />
+</T.Mesh>
 
 <T.Mesh geometry={ringGeometry} position={[-20, terrainHeight(-20, -16) + 0.09, -16]} rotation={[-Math.PI / 2, 0, 0]}>
   <T.MeshBasicMaterial color="#c9a85c" transparent opacity={$completedDiscoveries.has('shrine') ? 0.55 : 0.12} />
@@ -115,17 +76,28 @@
 {#each landmarks as landmark (landmark.id)}
   <WorldModel
     url={landmark.model}
-    position={[
-      landmark.position[0],
-      terrainHeight(landmark.position[0], landmark.position[2]) + landmark.position[1],
-      landmark.position[2],
-    ]}
+    position={landmarkWorldPosition(landmark)}
     rotation={landmark.rotation}
     scale={landmark.scale}
     muted={landmark.id === 'far-castle'}
-    stripHighRoof={landmark.id === 'silverrun-bridge'}
   />
 {/each}
+
+<!-- Soft violet wash along the mistcliff stair flight. -->
+<T.PointLight
+  position={[WHISPERING_ASCENT.landingX + 1.2, WHISPERING_ASCENT.landingY + 2.8, WHISPERING_ASCENT.landingZ]}
+  color="#9a8ab8"
+  intensity={9}
+  distance={16}
+/>
+<T.PointLight
+  position={[WHISPERING_ASCENT.topX + 2.5, WHISPERING_ASCENT.topY + 3.2, WHISPERING_ASCENT.topZ + 1]}
+  color="#7a6e9a"
+  intensity={11}
+  distance={18}
+/>
+
+<StairMist />
 
 {#if $completedDiscoveries.has('shrine')}
   <T.Mesh
@@ -145,6 +117,21 @@
     scale={[1.2, 2.4, 1.2]}
   />
   <T.PointLight position={[22, terrainHeight(22, -22) + 9.5, -22]} color="#ffb762" intensity={30} distance={22} />
+{/if}
+
+{#if $completedDiscoveries.has('ascent')}
+  <T.Mesh
+    geometry={glowGeometry}
+    material={glowMaterial}
+    position={[WHISPERING_ASCENT.topX, WHISPERING_ASCENT.topY + 5.2, WHISPERING_ASCENT.topZ]}
+    scale={[1.1, 1.8, 1.1]}
+  />
+  <T.PointLight
+    position={[WHISPERING_ASCENT.topX, WHISPERING_ASCENT.topY + 4.4, WHISPERING_ASCENT.topZ]}
+    color="#c4b0e0"
+    intensity={22}
+    distance={16}
+  />
 {/if}
 
 {#if $dusk}

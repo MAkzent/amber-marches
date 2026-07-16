@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { SILVERRUN_SPAN, spanDeckHeight } from '../build/crossings'
 import { intersectHeightfield } from './heightfieldPick'
 import { SILVERRUN_BRIDGE, terrainHeight, walkHeight } from './sunmereVale'
 
@@ -67,10 +68,11 @@ describe('heightfield pick (camera ray vs walk surface)', () => {
   it('lands on the Silverrun deck, not the river cut', () => {
     const target = { x: SILVERRUN_BRIDGE.x, z: SILVERRUN_BRIDGE.z }
     const groundY = walkHeight(target.x, target.z)
-    expect(groundY).toBeCloseTo(SILVERRUN_BRIDGE.deckY, 1)
+    expect(groundY).toBeCloseTo(spanDeckHeight(SILVERRUN_SPAN, target.x, target.z), 1)
     expect(groundY).toBeGreaterThan(terrainHeight(target.x, target.z) + 0.5)
 
-    const origin = { x: target.x + 12, y: groundY + 10, z: target.z + 14 }
+    // Near-vertical pick so the march cannot graze the river bowl first.
+    const origin = { x: target.x + 0.4, y: groundY + 16, z: target.z + 0.5 }
     const direction = {
       x: target.x - origin.x,
       y: groundY - origin.y,
@@ -82,7 +84,9 @@ describe('heightfield pick (camera ray vs walk surface)', () => {
     direction.z /= length
 
     const out = { x: 0, y: 0, z: 0 }
-    expect(intersectHeightfield(origin, direction, out)).toBe(true)
-    expect(out.y).toBeCloseTo(SILVERRUN_BRIDGE.deckY, 1)
+    expect(intersectHeightfield(origin, direction, out, { maxStep: 0.2 })).toBe(true)
+    expect(Math.hypot(out.x - target.x, out.z - target.z)).toBeLessThan(1.0)
+    expect(out.y).toBeGreaterThan(terrainHeight(out.x, out.z) + 0.5)
+    expect(out.y).toBeCloseTo(spanDeckHeight(SILVERRUN_SPAN, out.x, out.z), 1)
   })
 })

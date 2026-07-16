@@ -5,11 +5,39 @@ type AudioNodes = {
   context: AudioContext
   master: GainNode
   wind: AudioBufferSourceNode
+  windGain: GainNode
   river: AudioBufferSourceNode
   rain: AudioBufferSourceNode
+  rainFilter: BiquadFilterNode
   rainGain: GainNode
   music: HTMLAudioElement
   birdTimer: ReturnType<typeof setInterval>
+}
+
+function weatherAmbienceGain(weather: WeatherMode) {
+  if (weather === 'sunshower') return 0.075
+  if (weather === 'snow') return 0.042
+  return 0.0001
+}
+
+function applyWeatherAmbience(nodes: AudioNodes, weather: WeatherMode, now: number) {
+  const filter = nodes.rainFilter
+  filter.frequency.cancelScheduledValues(now)
+  if (weather === 'snow') {
+    filter.type = 'lowpass'
+    filter.frequency.setValueAtTime(filter.frequency.value, now)
+    filter.frequency.linearRampToValueAtTime(820, now + 1.2)
+  } else {
+    filter.type = 'highpass'
+    filter.frequency.setValueAtTime(filter.frequency.value || 3100, now)
+    filter.frequency.linearRampToValueAtTime(3100, now + 1.2)
+  }
+
+  nodes.rainGain.gain.cancelScheduledValues(now)
+  nodes.rainGain.gain.linearRampToValueAtTime(weatherAmbienceGain(weather), now + 1.2)
+
+  nodes.windGain.gain.cancelScheduledValues(now)
+  nodes.windGain.gain.linearRampToValueAtTime(weather === 'snow' ? 0.32 : 0.24, now + 1.2)
 }
 
 function whiteNoiseBuffer(context: AudioContext, seconds: number) {
@@ -103,7 +131,7 @@ function createNodes() {
     if (context.state === 'running' && Math.random() > 0.28) chirp(context, master)
   }, 2600)
 
-  return { context, master, wind, river, rain, rainGain, music, birdTimer }
+  return { context, master, wind, windGain, river, rain, rainFilter, rainGain, music, birdTimer }
 }
 
 export function createAudioDirector() {
@@ -116,7 +144,7 @@ export function createAudioDirector() {
   unsubscribeAudio = audioEnabled.subscribe(async (enabled) => {
     if (enabled && !nodes) {
       nodes = createNodes()
-      nodes.rainGain.gain.value = currentWeather === 'sunshower' ? 0.075 : 0.0001
+      applyWeatherAmbience(nodes, currentWeather, nodes.context.currentTime)
     }
     if (!nodes) return
     if (enabled) {
@@ -151,9 +179,7 @@ export function createAudioDirector() {
   unsubscribeWeather = weatherMode.subscribe((weather) => {
     currentWeather = weather
     if (!nodes) return
-    const now = nodes.context.currentTime
-    nodes.rainGain.gain.cancelScheduledValues(now)
-    nodes.rainGain.gain.linearRampToValueAtTime(weather === 'sunshower' ? 0.075 : 0.0001, now + 1.2)
+    applyWeatherAmbience(nodes, weather, nodes.context.currentTime)
   })
 
   return () => {

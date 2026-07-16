@@ -12,13 +12,27 @@
     NormalPass,
     RenderPass,
     SSAOEffect,
-    TiltShiftEffect,
     VignetteEffect,
   } from 'postprocessing'
-  import { reducedMotion } from '../worldState'
+  import { get } from 'svelte/store'
+  import { cameraMode, combatLive, reducedMotion } from '../worldState'
+  import { samplePerf } from '../perfStats'
   import { calculatePixelGrid } from './pixelGrid'
+  import { createSoftTiltShiftEffect } from './softTiltShift'
 
   const CSS_PIXEL_SIZE = 2
+  const EXPLORE_VIGNETTE_DARKNESS = 0.26
+  const EXPLORE_VIGNETTE_OFFSET = 0.32
+  /** Combat vignette — soft edge crush, no tilt-shift blur. */
+  const COMBAT_VIGNETTE_DARKNESS = 0.69
+  const COMBAT_VIGNETTE_OFFSET = 0.4
+  /** Wider focus + feather so explore blur eases in without a hard seam. */
+  const EXPLORE_TILT_FOCUS = 0.66
+  const EXPLORE_TILT_FEATHER = 0.48
+  const EXPLORE_TILT_OFFSET = 0.045
+  /** Full-frame focus kills tilt-shift blur during combat. */
+  const COMBAT_TILT_FOCUS = 1
+  const COMBAT_TILT_FEATHER = 0
 
   class SunmereHd2dEffect extends Effect {
     private readonly pixelGrid: Uniform<Vector4>
@@ -112,25 +126,30 @@
   const { scene, renderer, camera, autoRender, renderStage } = useThrelte()
   const composer = new EffectComposer(renderer, { multisampling: 0 })
   const renderPass = new RenderPass(scene, camera.current)
-  const normalPass = new NormalPass(scene, camera.current)
+  const normalPass = new NormalPass(scene, camera.current, {
+    resolutionScale: 0.5,
+  })
   const ambientOcclusion = new SSAOEffect(camera.current, normalPass.texture, {
     blendFunction: BlendFunction.MULTIPLY,
-    samples: 8,
-    rings: 3,
+    samples: 4,
+    rings: 2,
     radius: 0.065,
     intensity: 1.08,
     luminanceInfluence: 0.84,
   })
   const bloom = new BloomEffect({
     intensity: 0.52,
-    luminanceThreshold: 0.56,
+    luminanceThreshold: 0.62,
     luminanceSmoothing: 0.38,
     mipmapBlur: true,
+    // Fewer MIP RTs — heavy particle weather was exhausting GPU memory and
+    // leaking half-res bloom tiles as solid yellow rectangles.
+    levels: 5,
   })
-  const tiltShift = new TiltShiftEffect({
-    offset: 0.045,
-    focusArea: 0.58,
-    feather: 0.28,
+  const tiltShift = createSoftTiltShiftEffect({
+    offset: EXPLORE_TILT_OFFSET,
+    focusArea: EXPLORE_TILT_FOCUS,
+    feather: EXPLORE_TILT_FEATHER,
     kernelSize: KernelSize.VERY_SMALL,
     resolutionScale: 0.55,
   })
@@ -139,17 +158,21 @@
     darkness: 0.26,
     offset: 0.32,
   })
-  const effectPass = new EffectPass(
+  // CRITICAL: keep mainUv pixel-grid (hd2dGrade) off the bloom/tilt pass.
+  // postprocessing feeds the same UV into every mainImage in a merged pass, so
+  // quantizing UV while bloom/tilt sample their half-res maps paints those
+  // maps as hard rectangular slabs — the yellow “arrow area” glitch.
+  const lightingPass = new EffectPass(
     camera.current,
     ambientOcclusion,
     bloom,
     tiltShift,
-    hd2dGrade,
-    vignette,
   )
+  const gradePass = new EffectPass(camera.current, hd2dGrade, vignette)
   composer.addPass(renderPass)
   composer.addPass(normalPass)
-  composer.addPass(effectPass)
+  composer.addPass(lightingPass)
+  composer.addPass(gradePass)
 
   const rendererSize = new Vector2()
   const drawingBufferSize = new Vector2()
@@ -172,17 +195,51 @@
   }
 
   const previousAutoRender = autoRender.current
+  const previousInfoAutoReset = renderer.info.autoReset
+  renderer.info.autoReset = false
   autoRender.set(false)
-  const task = renderStage.createTask(Symbol('storybook-postprocessing'), () => {
-    // Threlte owns canvas layout and resizes its renderer before this stage.
-    // Compare physical buffer dimensions so CSS size, DPR, orientation and
-    // fullscreen changes all update every post-processing render target.
-    syncComposerSize()
-    renderPass.mainCamera = camera.current
-    normalPass.mainCamera = camera.current
-    effectPass.mainCamera = camera.current
-    composer.render()
-  })
+  /** Eased 0..1 so dialogue vignette matches combat punch-in / soft release. */
+  let converseVignette = 0
+  const task = renderStage.createTask(
+    Symbol('storybook-postprocessing'),
+    (delta) => {
+      // Threlte owns canvas layout and resizes its renderer before this stage.
+      // Compare physical buffer dimensions so CSS size, DPR, orientation and
+      // fullscreen changes all update every post-processing render target.
+      syncComposerSize()
+      renderPass.mainCamera = camera.current
+      normalPass.mainCamera = camera.current
+      lightingPass.mainCamera = camera.current
+      gradePass.mainCamera = camera.current
+
+      const wantConverse = get(cameraMode).kind === 'converse' ? 1 : 0
+      if ($reducedMotion) {
+        converseVignette = wantConverse
+      } else {
+        const ease = 1 - Math.pow(wantConverse > 0.5 ? 0.05 : 0.009, delta)
+        converseVignette += (wantConverse - converseVignette) * ease
+        if (Math.abs(converseVignette - wantConverse) < 0.001) converseVignette = wantConverse
+      }
+
+      // Same soft vignette for combat zoom and chat converse framing.
+      const focusMix =
+        Math.max(combatLive.intensity, converseVignette) * ($reducedMotion ? 0.55 : 1)
+      vignette.darkness =
+        EXPLORE_VIGNETTE_DARKNESS +
+        (COMBAT_VIGNETTE_DARKNESS - EXPLORE_VIGNETTE_DARKNESS) * focusMix
+      vignette.offset =
+        EXPLORE_VIGNETTE_OFFSET + (COMBAT_VIGNETTE_OFFSET - EXPLORE_VIGNETTE_OFFSET) * focusMix
+      tiltShift.focusArea =
+        EXPLORE_TILT_FOCUS + (COMBAT_TILT_FOCUS - EXPLORE_TILT_FOCUS) * focusMix
+      tiltShift.feather =
+        EXPLORE_TILT_FEATHER + (COMBAT_TILT_FEATHER - EXPLORE_TILT_FEATHER) * focusMix
+      tiltShift.offset = EXPLORE_TILT_OFFSET
+
+      renderer.info.reset()
+      composer.render()
+      samplePerf(delta, renderer.info)
+    },
+  )
 
   $effect(() => {
     bloom.intensity = $reducedMotion ? 0.34 : 0.52
@@ -192,6 +249,8 @@
     task.stop()
     renderStage.removeTask(task)
     composer.dispose()
+    renderer.info.autoReset = previousInfoAutoReset
+    renderer.info.reset()
     autoRender.set(previousAutoRender)
   })
 </script>

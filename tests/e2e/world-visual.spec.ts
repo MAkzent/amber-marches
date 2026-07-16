@@ -15,11 +15,21 @@ test('opening vista renders and the first discovery is playable', async ({ page 
   await page.waitForTimeout(2800)
   await page.keyboard.up('w')
 
-  await expect(page.getByRole('button', { name: /Speak The Bellkeeper/i })).toBeVisible({ timeout: 5000 })
-  await page.keyboard.press('e')
-  await expect(page.getByRole('heading', { name: 'The Bellkeeper' })).toBeVisible()
+  const speakButton = page.getByRole('button', { name: /Speak The Bellkeeper/i })
+  await expect(speakButton).toBeVisible({ timeout: 5000 })
+  await speakButton.click()
+  // Camera frames the speaker before the bubble appears.
+  await expect(page.getByTestId('dialogue-box')).toBeVisible({ timeout: 4000 })
+  await expect(page.getByRole('heading', { name: /Mara the Bellkeeper/i })).toBeVisible()
   await page.waitForTimeout(650)
   await page.screenshot({ path: 'test-results/village-discovery.png' })
+
+  // Finish the typewriter, then advance through remaining lines.
+  await page.keyboard.press('e')
+  await page.keyboard.press('e')
+  await page.keyboard.press('e')
+  await page.keyboard.press('e')
+  await expect(page.getByRole('heading', { name: 'The Bellkeeper' })).toBeVisible({ timeout: 3000 })
 
   expect(pageErrors).toEqual([])
 })
@@ -30,6 +40,37 @@ test('the HUD remains legible in a narrow viewport', async ({ page }) => {
   await page.waitForTimeout(1800)
   await expect(page.getByRole('button', { name: /Enter the vale/i })).toBeVisible()
   await page.screenshot({ path: 'test-results/narrow-vista.png' })
+})
+
+test('the Silverrun bridge and shallow ford remain playable', async ({ page }) => {
+  test.setTimeout(60_000)
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+
+  await page.goto('/?art=bridge')
+  await page.getByRole('button', { name: /Enter the vale/i }).click()
+  await expect(page.getByRole('button', { name: /Take in the view/i })).toBeVisible()
+  await page.waitForTimeout(900)
+  await page.screenshot({ path: 'test-results/silverrun-bridge.png' })
+
+  // Walk toward one abutment and back across the crowned deck.
+  await page.keyboard.down('w')
+  await page.waitForTimeout(700)
+  await page.keyboard.up('w')
+  await page.keyboard.down('s')
+  await page.waitForTimeout(1400)
+  await page.keyboard.up('s')
+
+  // The dedicated art start exercises wading and its disturbance effects.
+  await page.goto('/?art=ford')
+  await page.getByRole('button', { name: /Enter the vale/i }).click()
+  await page.keyboard.down('a')
+  await page.waitForTimeout(600)
+  await page.keyboard.up('a')
+  await page.waitForTimeout(450)
+  await page.screenshot({ path: 'test-results/silverrun-ford.png' })
+
+  expect(pageErrors).toEqual([])
 })
 
 test('mobile rotation preserves the canvas and framebuffer proportions', async ({ browser }) => {
@@ -92,4 +133,17 @@ test('shrine and watchtower art states remain composed through dusk', async ({ p
   await page.keyboard.press('e')
   await page.waitForTimeout(1800)
   await page.screenshot({ path: 'test-results/watchtower-dusk.png' })
+})
+
+test('procedural ascent and mountain summit render without asset failures', async ({ page }) => {
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+
+  await page.goto('/?art=ascent')
+  await page.getByRole('button', { name: /Enter the vale/i }).click()
+  await page.waitForTimeout(1800)
+
+  await expect(page.getByTestId('world-canvas')).toBeVisible()
+  await page.screenshot({ path: 'test-results/whispering-ascent.png' })
+  expect(pageErrors).toEqual([])
 })

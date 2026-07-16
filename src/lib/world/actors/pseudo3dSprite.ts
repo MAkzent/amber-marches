@@ -1,5 +1,4 @@
 import {
-  CircleGeometry,
   Group,
   Mesh,
   MeshBasicMaterial,
@@ -19,7 +18,6 @@ export type Pseudo3DSprite = {
   body: Group
   mesh: Mesh
   outline: Mesh
-  shadow: Mesh
   material: MeshBasicMaterial
   outlineMaterial: MeshBasicMaterial
   depthMaterial: MeshDepthMaterial
@@ -119,9 +117,9 @@ function attachSpriteGrade(material: MeshBasicMaterial, texelSize: Vector2) {
 }
 
 /**
- * Expands the source alpha by exactly one sprite texel. Unlike scaling a second
- * card, this keeps stair-step corners square and gives every silhouette edge
- * the same restrained, pixel-perfect weight.
+ * Expands the source alpha by one sprite texel on the four cardinals only.
+ * Skipping diagonals keeps stair-step corners crisp without the heavy corner
+ * blobs a full Moore neighborhood produces on large billboards.
  */
 function attachPixelOutline(material: MeshBasicMaterial, texelSize: Vector2) {
   material.onBeforeCompile = (shader) => {
@@ -143,16 +141,12 @@ function attachPixelOutline(material: MeshBasicMaterial, texelSize: Vector2) {
           outlineAlpha = max(outlineAlpha, texture2D(map, vMapUv - vec2(px.x, 0.0)).a);
           outlineAlpha = max(outlineAlpha, texture2D(map, vMapUv + vec2(0.0, px.y)).a);
           outlineAlpha = max(outlineAlpha, texture2D(map, vMapUv - vec2(0.0, px.y)).a);
-          outlineAlpha = max(outlineAlpha, texture2D(map, vMapUv + px).a);
-          outlineAlpha = max(outlineAlpha, texture2D(map, vMapUv - px).a);
-          outlineAlpha = max(outlineAlpha, texture2D(map, vMapUv + vec2(px.x, -px.y)).a);
-          outlineAlpha = max(outlineAlpha, texture2D(map, vMapUv + vec2(-px.x, px.y)).a);
           diffuseColor.rgb = diffuse;
           diffuseColor.a = outlineAlpha * opacity;
         #endif`,
       )
   }
-  material.customProgramCacheKey = () => 'pseudo3d-pixel-outline-v1'
+  material.customProgramCacheKey = () => 'pseudo3d-pixel-outline-v2'
 }
 
 /**
@@ -160,10 +154,9 @@ function attachPixelOutline(material: MeshBasicMaterial, texelSize: Vector2) {
  *
  * Hierarchy:
  *   root          → sits on walkHeight (one ground contact for the whole actor)
- *     shadow      → ground blob, child of root (never floats with bob)
  *     body        → yaw-faces camera (cylindrical billboard)
  *       outline
- *       mesh      → vertical card with foot-weighted depth bias
+ *       mesh      → vertical card; casts alpha-cutout silhouette shadows
  *
  * Gameplay collision stays an XZ disc of `radius` centered on root — the card is
  * only a visual. That split is what stops "paper plane vs house" bugs.
@@ -175,6 +168,8 @@ export function createPseudo3DSprite(options: {
   radius?: number
   outlineColor?: ColorRepresentation
   outlineScale?: number
+  /** 0 hides the shader outline (useful when the sheet already has a baked edge). */
+  outlineOpacity?: number
   renderOrder?: number
   /** Offsets transparent padding below the artwork so visible feet meet the root. */
   bodyBaseY?: number
@@ -183,6 +178,7 @@ export function createPseudo3DSprite(options: {
   const width = options.width ?? height * 0.72
   const radius = options.radius ?? Math.max(0.45, width * 0.42)
   const outlineScale = options.outlineScale ?? 1
+  const outlineOpacity = options.outlineOpacity ?? 1
   const renderOrder = options.renderOrder ?? 4
   const bodyBaseY = options.bodyBaseY ?? 0
   const texelSize = new Vector2(1 / 128, 1 / 128)
@@ -199,22 +195,6 @@ export function createPseudo3DSprite(options: {
   const body = new Group()
   body.position.y = bodyBaseY
   root.add(body)
-
-  const shadowGeometry = new CircleGeometry(radius * 1.2, 28)
-  const shadowMaterial = new MeshBasicMaterial({
-    color: '#1c1812',
-    transparent: true,
-    opacity: 0.3,
-    depthWrite: false,
-    toneMapped: false,
-  })
-  const shadow = new Mesh(shadowGeometry, shadowMaterial)
-  shadow.rotation.x = -Math.PI / 2
-  shadow.position.y = 0.03
-  shadow.renderOrder = 1
-  shadow.receiveShadow = false
-  shadow.castShadow = false
-  root.add(shadow)
 
   const geometry = new PlaneGeometry(width, height)
   geometry.translate(0, height / 2, 0)
@@ -247,6 +227,7 @@ export function createPseudo3DSprite(options: {
     map: options.map,
     color: options.outlineColor ?? '#10120f',
     transparent: true,
+    opacity: outlineOpacity,
     alphaTest: 0.22,
     depthTest: true,
     depthWrite: false,
@@ -260,6 +241,7 @@ export function createPseudo3DSprite(options: {
   outline.scale.set(outlineScale, outlineScale, 1)
   outline.renderOrder = renderOrder - 1
   outline.frustumCulled = false
+  outline.visible = outlineOpacity > 0.01
 
   body.add(outline)
   body.add(mesh)
@@ -296,7 +278,6 @@ export function createPseudo3DSprite(options: {
     body,
     mesh,
     outline,
-    shadow,
     material,
     outlineMaterial,
     depthMaterial,

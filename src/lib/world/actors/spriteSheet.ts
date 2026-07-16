@@ -2,10 +2,13 @@
 export const FRAME_WIDTH = 32
 export const FRAME_HEIGHT = 32
 export const SHEET_ROWS = 4
-export const FRAME_SECONDS = { idle: 0.2, walk: 0.2, run: 0.12 } as const
+export const FRAME_SECONDS = { idle: 0.2, walk: 0.2, run: 0.12, attack: 0.08 } as const
 
 export type Facing = 'front-right' | 'front-left' | 'back-right' | 'back-left'
 export type Motion = keyof typeof FRAME_SECONDS
+
+/** Motions that loop while held; attack plays once then yields to locomotion. */
+export const LOOPING_MOTIONS: ReadonlySet<Motion> = new Set(['idle', 'walk', 'run'])
 
 /**
  * Camera-relative movement lands in world-space quadrants in the isometric rig.
@@ -38,7 +41,9 @@ export function motionForMovement(moving: boolean, runModifier: boolean): Motion
 
 export function frameIndex(elapsed: number, frameCount: number, motion: Motion) {
   if (frameCount <= 1) return 0
-  return Math.floor(elapsed / FRAME_SECONDS[motion]) % frameCount
+  const raw = Math.floor(elapsed / FRAME_SECONDS[motion])
+  if (LOOPING_MOTIONS.has(motion)) return raw % frameCount
+  return Math.min(frameCount - 1, raw)
 }
 
 export function textureColumns(imageWidth: number) {

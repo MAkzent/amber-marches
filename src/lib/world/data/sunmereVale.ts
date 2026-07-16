@@ -1,9 +1,93 @@
+import { groundedRootY, type TerrainPadMode } from './grounding'
+import {
+  WHISPERING_ASCENT,
+  onAscentLane,
+  sampleAscent,
+  type AscentSample,
+} from './mysteriousStairs'
+import { SILVERRUN_SPAN, onSpanDeck, spanDeckBlend, spanDeckHeight, spanYawFromAxis } from '../build/crossings'
+import { buildSnappedRoadNetwork } from '../build/snap'
+import {
+  RIVER_HALF_WIDTH,
+  WATER_SURFACE_Y,
+  riverCenter,
+  sampleRiver,
+  sampleRiverAxis,
+} from './silverrunChannel'
+
+export {
+  WHISPERING_ASCENT,
+  ASCENT_LENGTH,
+  ascentBlend,
+  ascentPointAt,
+  ascentStones,
+  ascentSurfaceY,
+  ascentWalkY,
+  onAscentLane,
+  onAscentTreads,
+  projectOntoAscent,
+  sampleAscent,
+} from './mysteriousStairs'
+
+export {
+  RIVER_HALF_WIDTH,
+  WATER_SURFACE_Y,
+  SILVERRUN_FORD_X,
+  riverCenter,
+  sampleRiver,
+  sampleRiverAxis,
+} from './silverrunChannel'
+export { SILVERRUN_SPAN, BRIDGE_SPANS } from '../build/crossings'
+
 export type Landmark = {
   id: string
   model: string
-  position: [number, number, number]
+  /**
+   * World XZ pivot. World Y is never authored — use `landmarkWorldPosition`
+   * so props sit on the height field via footLocalY + contactBias + pad sample.
+   */
+  xz: [number, number]
   rotation?: [number, number, number]
   scale: number
+  /**
+   * Model-space Y of the visual foot (`bbox.min.y`). KayKit props sit on 0.
+   * World foot = rootY + footLocalY * scale.
+   */
+  footLocalY?: number
+  /**
+   * Extra lift (+) / dig (-) after grounding. Keep tiny — large values recreate
+   * the old "floating watchtower" bug (authored Y fighting terrainHeight).
+   */
+  contactBias?: number
+  /**
+   * Local XZ half-extent of the solid footprint (from GLB POSITION AABB).
+   * World foot radius = footRadiusLocal * scale. Collider uses colliderFit on top.
+   */
+  footRadiusLocal: number
+  /**
+   * Shrink factor vs AABB disc so heroes can hug walls without tunneling.
+   * Default 0.92. Set `blocksMovement: false` for walkable props (bridge).
+   */
+  colliderFit?: number
+  /** When false, no solid disc — heroes walk through (Silverrun bridge). */
+  blocksMovement?: boolean
+  /** Footprint radius for slope pad sampling; defaults to world foot radius. */
+  padRadius?: number
+  padMode?: TerrainPadMode
+}
+
+/** World-space visual foot radius (AABB disc × scale). */
+export function landmarkFootRadius(landmark: Landmark) {
+  return landmark.footRadiusLocal * landmark.scale
+}
+
+/**
+ * Solid movement disc. Sized from measured mesh bounds so discovery rings
+ * remain reachable (collider + HERO_RADIUS < discovery.radius when centered).
+ */
+export function landmarkColliderRadius(landmark: Landmark): number | null {
+  if (landmark.blocksMovement === false) return null
+  return landmarkFootRadius(landmark) * (landmark.colliderFit ?? 0.92)
 }
 
 export type SceneryPoint = {
@@ -26,84 +110,249 @@ const random = seeded(0x51a7c0de)
 
 export const WORLD_BOUNDS = { minX: -43, maxX: 43, minZ: -31, maxZ: 29 }
 
+export const MISTCLIFF_MOUNTAIN = {
+  x: -19.5,
+  z: -28.2,
+  radiusX: 8.3,
+  radiusZ: 7.2,
+  summitFraction: 0.5,
+  height: 4.85,
+} as const
+
+function smoothstep(edge0: number, edge1: number, value: number) {
+  const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)))
+  return t * t * (3 - 2 * t)
+}
+
+/** Flat-crowned rise with a compact, naturally blended mountain shoulder. */
+export function mistcliffMountainRise(x: number, z: number) {
+  const dx = (x - MISTCLIFF_MOUNTAIN.x) / MISTCLIFF_MOUNTAIN.radiusX
+  const dz = (z - MISTCLIFF_MOUNTAIN.z) / MISTCLIFF_MOUNTAIN.radiusZ
+  const radial = Math.hypot(dx, dz)
+  return (
+    MISTCLIFF_MOUNTAIN.height *
+    (1 - smoothstep(MISTCLIFF_MOUNTAIN.summitFraction, 1, radial))
+  )
+}
+
+/** Hero-clear summit around the far castle, with optional world-space padding. */
+export function onMistcliffSummit(x: number, z: number, margin = 0) {
+  const radiusX = Math.max(
+    0.001,
+    MISTCLIFF_MOUNTAIN.radiusX * MISTCLIFF_MOUNTAIN.summitFraction + margin,
+  )
+  const radiusZ = Math.max(
+    0.001,
+    MISTCLIFF_MOUNTAIN.radiusZ * MISTCLIFF_MOUNTAIN.summitFraction + margin,
+  )
+  return (
+    ((x - MISTCLIFF_MOUNTAIN.x) / radiusX) ** 2 +
+      ((z - MISTCLIFF_MOUNTAIN.z) / radiusZ) ** 2 <=
+    1
+  )
+}
+
+/**
+ * Landmark props — footRadiusLocal values come from GLB POSITION accessor AABBs
+ * (max of half-X / half-Z). Do not hand-inflate colliders; use colliderFit instead.
+ */
 export const landmarks: Landmark[] = [
   {
     id: 'house-west',
     model: '/assets/cc0/kaykit-medieval/Models/objects/gltf/house.gltf.glb',
-    position: [-13, 0.4, 10],
+    xz: [-13, 10],
     rotation: [0, 0.35, 0],
     scale: 2.4,
+    footRadiusLocal: 0.844,
   },
   {
     id: 'market',
     model: '/assets/cc0/kaykit-medieval/Models/objects/gltf/market.gltf.glb',
-    position: [-5, 0.25, 11],
+    xz: [-5, 11],
     rotation: [0, -0.55, 0],
     scale: 2.15,
+    footRadiusLocal: 0.837,
   },
   {
     id: 'mill',
     model: '/assets/cc0/kaykit-medieval/Models/objects/gltf/mill.gltf.glb',
-    position: [-20, 0.5, 14],
+    xz: [-20, 14],
     rotation: [0, 0.2, 0],
     scale: 2.4,
+    footRadiusLocal: 0.844,
+    // Body/fence sit on local y≈0 like other KayKit props. Do not use blade-mesh
+    // AABB min.y (−0.689) — that is blade-local space and floats the mill by ~1.65.
   },
   {
     id: 'well',
     model: '/assets/cc0/kaykit-medieval/Models/objects/gltf/well.gltf.glb',
-    position: [-8, 0.28, 7],
+    xz: [-8, 7],
     scale: 2.2,
-  },
-  {
-    id: 'silverrun-bridge',
-    model: '/assets/cc0/kaykit-medieval/Models/objects/gltf/bridge_roofed.gltf.glb',
-    position: [6, 0.25, -2],
-    rotation: [0, Math.PI / 2, 0],
-    scale: 2.05,
+    footRadiusLocal: 0.509,
   },
   {
     id: 'watchtower',
     model: '/assets/cc0/kaykit-medieval/Models/objects/gltf/watchtower.gltf.glb',
-    position: [22, 1.5, -22],
+    xz: [22, -22],
     rotation: [0, -0.35, 0],
     scale: 3.05,
+    // AABB includes the side shack; cylinder alone is smaller — fit keeps approach open.
+    footRadiusLocal: 0.857,
+    // Mound lift comes from terrainHeight's towerRise — do not re-add it here.
   },
   {
     id: 'shrine-ring',
     model: '/assets/cc0/kenney-nature/Models/GLTF format/statue_ring.glb',
-    position: [-20, 0.8, -16],
+    xz: [-20, -16],
     rotation: [0, 0.2, 0],
     scale: 2.8,
+    footRadiusLocal: 0.3,
+  },
+  {
+    id: 'far-castle',
+    model: '/assets/cc0/kaykit-medieval/Models/objects/gltf/castle.gltf.glb',
+    // Sits west of the stair mouth so the summit arrival remains hero-width clear.
+    xz: [-21.6, -28.9],
+    rotation: [0, 0.55, 0],
+    scale: 2.35,
+    footRadiusLocal: 1.05,
+    colliderFit: 0.78,
+    padMode: 'center',
   },
 ]
 
 /**
- * Landmark blockers — large enough to cover visible KayKit footprints, but with
- * corridor gaps so the village road between house / well / market stays passable.
+ * Landmark blockers — derived from measured mesh footprints, not hand-tuned discs.
+ * Village road corridors stay open because house/market/well no longer overlap.
  */
-export const collisionCircles = [
-  { x: -13, z: 10, radius: 3.45 },
-  { x: -5, z: 11, radius: 3.05 },
-  { x: -20, z: 14, radius: 3.7 },
-  { x: -8, z: 7, radius: 1.45 },
-  { x: 22, z: -22, radius: 3.55 },
-  { x: -20, z: -16, radius: 2.35 },
-]
+export const collisionCircles = landmarks.flatMap((landmark) => {
+  const radius = landmarkColliderRadius(landmark)
+  if (radius == null) return []
+  return [{ x: landmark.xz[0], z: landmark.xz[1], radius, landmarkId: landmark.id }]
+})
+
+/**
+ * Authored road drafts — snap inserts abutments so paths meet the Silverrun
+ * span on the banks, not as a dirt pad floating mid-channel.
+ * Index 0 = main pilgrim road (width 1.5); others are branches (width 1.08).
+ */
+export const roadPaths: Array<Array<[number, number]>> = buildSnappedRoadNetwork([
+  {
+    // Loose ford waypoint at the span; snap rewrites to abutment → deck → abutment.
+    waypoints: [
+      [1, 24],
+      [-2, 18],
+      [-8, 11],
+      [-3, 5],
+      [SILVERRUN_SPAN.x, SILVERRUN_SPAN.z],
+      [11, -9],
+      [22, -22],
+    ],
+    crossSpanId: 'silverrun',
+  },
+  {
+    // Shrine branch joins at the nearer abutment (Y-junction on the approach).
+    waypoints: [
+      [SILVERRUN_SPAN.x, SILVERRUN_SPAN.z],
+      [-3, -8],
+      [-11, -11],
+      [-20, -16],
+    ],
+    joinSpanId: 'silverrun',
+  },
+  {
+    waypoints: [
+      [-8, 11],
+      [-14, 12],
+      [-20, 14],
+    ],
+  },
+  // Spur from Shrinewood toward the Whispering Ascent.
+  {
+    waypoints: [
+      [-20, -16],
+      [-15.5, -16.2],
+      [-12.5, -16.6],
+      [-11.2, -17.0],
+    ],
+  },
+])
+
+/** Matches Terrain.svelte road strip widths. */
+export const ROAD_WIDTHS = [1.5, 1.08, 1.08, 1.08] as const
+
+/**
+ * Min distance from road centerline that scenery must stay outside.
+ * Sized for road half-width + hero disc (0.65) + max oak trunk (~0.61) + margin.
+ */
+export const ROAD_SCENERY_CLEARANCE = 2.2
+
+/** Distance from (x,z) to the nearest point on a polyline of XZ waypoints. */
+export function distanceToPolyline(x: number, z: number, path: Array<[number, number]>) {
+  let minDist = Infinity
+  for (let i = 0; i < path.length - 1; i += 1) {
+    const [ax, az] = path[i]
+    const [bx, bz] = path[i + 1]
+    const dx = bx - ax
+    const dz = bz - az
+    const lenSq = dx * dx + dz * dz
+    const t = lenSq < 1e-8 ? 0 : Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / lenSq))
+    const px = ax + t * dx
+    const pz = az + t * dz
+    minDist = Math.min(minDist, Math.hypot(x - px, z - pz))
+  }
+  return minDist
+}
+
+export function distanceToNearestRoad(x: number, z: number) {
+  let minDist = Infinity
+  for (const path of roadPaths) {
+    minDist = Math.min(minDist, distanceToPolyline(x, z, path))
+  }
+  return minDist
+}
+
+export function sampleRoadCenterline(
+  path: Array<[number, number]>,
+  spacing = 0.75,
+): Array<[number, number]> {
+  const samples: Array<[number, number]> = []
+  for (let i = 0; i < path.length - 1; i += 1) {
+    const [ax, az] = path[i]
+    const [bx, bz] = path[i + 1]
+    const len = Math.hypot(bx - ax, bz - az)
+    const steps = Math.max(1, Math.ceil(len / spacing))
+    for (let s = 0; s < steps; s += 1) {
+      const t = s / steps
+      samples.push([ax + (bx - ax) * t, az + (bz - az) * t])
+    }
+  }
+  const last = path[path.length - 1]
+  samples.push([last[0], last[1]])
+  return samples
+}
 
 export const scenery: SceneryPoint[] = []
 
 function blocksClearing(x: number, z: number) {
-  const riverDistance = Math.abs(z - riverCenter(x))
+  const river = sampleRiver(x, z)
   const villageDistance = Math.hypot(x + 9, z - 10)
-  const bridgeDistance = Math.hypot(x - 6, z + 2)
+  const bridgeDistance = Math.hypot(x - SILVERRUN_SPAN.x, z - SILVERRUN_SPAN.z)
   const shrineDistance = Math.hypot(x + 20, z + 16)
   const towerDistance = Math.hypot(x - 22, z + 22)
+  const ascentDistance = Math.hypot(x - WHISPERING_ASCENT.landingX, z - WHISPERING_ASCENT.landingZ)
+  const ascentTop = Math.hypot(x - WHISPERING_ASCENT.topX, z - WHISPERING_ASCENT.topZ)
   return (
-    riverDistance < 5.2 ||
+    river.distance < river.bankHalfWidth + 0.7 ||
     villageDistance < 9 ||
     bridgeDistance < 6.5 ||
     shrineDistance < 5 ||
-    towerDistance < 6
+    towerDistance < 6 ||
+    onAscentLane(x, z, 1.35) ||
+    ascentDistance < 4.2 ||
+    ascentTop < 5.5 ||
+    onMistcliffSummit(x, z, 1.2) ||
+    distanceToNearestRoad(x, z) < ROAD_SCENERY_CLEARANCE
   )
 }
 
@@ -117,8 +366,8 @@ function nearTree(x: number, z: number, minDist: number) {
 
 function pushTree(x: number, z: number, pineChance: number) {
   if (blocksClearing(x, z)) return
-  // Condensed stands: allow trunks closer than the old sparse scatter.
-  if (nearTree(x, z, 1.25)) return
+  // Airier stands — keep trunks from forming impassable walls.
+  if (nearTree(x, z, 2.1)) return
   scenery.push({
     x,
     z,
@@ -128,18 +377,21 @@ function pushTree(x: number, z: number, pineChance: number) {
   })
 }
 
-/** Dense forest pockets wrapping the vale — trees cluster toward each center. */
+/** Sparse forest pockets wrapping the vale — trees cluster toward each center. */
 const forestClusters = [
-  { x: 30, z: 9, count: 52, radius: 12.5, pineChance: 0.28 },
-  { x: -31, z: -5, count: 48, radius: 11.5, pineChance: 0.35 },
-  { x: 22, z: -15, count: 44, radius: 10.5, pineChance: 0.42 },
-  { x: -25, z: 15, count: 38, radius: 9.5, pineChance: 0.22 },
-  { x: 12, z: 17, count: 34, radius: 8.5, pineChance: 0.18 },
-  { x: -16, z: -22, count: 36, radius: 9.5, pineChance: 0.48 },
-  { x: 34, z: -18, count: 30, radius: 8.5, pineChance: 0.4 },
-  { x: -35, z: 5, count: 28, radius: 8, pineChance: 0.3 },
-  { x: 6, z: -24, count: 26, radius: 7.5, pineChance: 0.55 },
-  { x: -8, z: 20, count: 22, radius: 7, pineChance: 0.2 },
+  { x: 30, z: 9, count: 22, radius: 12.5, pineChance: 0.28 },
+  { x: -31, z: -5, count: 20, radius: 11.5, pineChance: 0.35 },
+  { x: 22, z: -15, count: 18, radius: 10.5, pineChance: 0.42 },
+  { x: -25, z: 15, count: 16, radius: 9.5, pineChance: 0.22 },
+  { x: 12, z: 17, count: 14, radius: 8.5, pineChance: 0.18 },
+  { x: -16, z: -22, count: 15, radius: 9.5, pineChance: 0.48 },
+  { x: 34, z: -18, count: 12, radius: 8.5, pineChance: 0.4 },
+  { x: -35, z: 5, count: 12, radius: 8, pineChance: 0.3 },
+  { x: 6, z: -24, count: 11, radius: 7.5, pineChance: 0.55 },
+  { x: -8, z: 20, count: 10, radius: 7, pineChance: 0.2 },
+  // Sparse pines framing the mist cliff (kept off the stair lane by blocksClearing).
+  { x: -22, z: -24, count: 9, radius: 6.5, pineChance: 0.72 },
+  { x: -8, z: -26, count: 8, radius: 5.5, pineChance: 0.65 },
 ] as const
 
 for (const cluster of forestClusters) {
@@ -152,7 +404,7 @@ for (const cluster of forestClusters) {
 }
 
 // Light fringe along the world rim so the horizon still reads as woods.
-for (let i = 0; i < 40; i += 1) {
+for (let i = 0; i < 18; i += 1) {
   const side = Math.floor(random() * 4)
   let x = (random() - 0.5) * 88
   let z = (random() - 0.5) * 62
@@ -164,11 +416,11 @@ for (let i = 0; i < 40; i += 1) {
 }
 
 // Sparse rocks / wildflowers in the open ground between stands.
-for (let i = 0; i < 55; i += 1) {
+for (let i = 0; i < 40; i += 1) {
   const x = (random() - 0.5) * 80
   const z = (random() - 0.5) * 56
   if (blocksClearing(x, z)) continue
-  if (nearTree(x, z, 2.2)) continue
+  if (nearTree(x, z, 2.4)) continue
   const roll = random()
   scenery.push({
     x,
@@ -179,95 +431,148 @@ for (let i = 0; i < 55; i += 1) {
   })
 }
 
-export const roadPaths: Array<Array<[number, number]>> = [
-  [
-    [1, 24],
-    [-2, 18],
-    [-8, 11],
-    [-3, 5],
-    [6, -2],
-    [11, -9],
-    [22, -22],
-  ],
-  [
-    [6, -2],
-    [-3, -8],
-    [-11, -11],
-    [-20, -16],
-  ],
-  [
-    [-8, 11],
-    [-14, 12],
-    [-20, 14],
-  ],
-]
+// Pale flowers on the Whispering Ascent mid-landing (reference: lavender meadow tread).
+for (const [fx, fz] of [
+  [-15.0, -23.6],
+  [-15.5, -23.9],
+  [-14.9, -24.1],
+  [-15.7, -23.5],
+  [-15.2, -24.3],
+] as const) {
+  scenery.push({ x: fx, z: fz, scale: 0.55 + random() * 0.25, hue: 0.72 + random() * 0.12, kind: 'flower' })
+}
+
+// Weathered stones flanking the stair mouth (kept clear of road discs).
+for (const [rx, rz, s] of [
+  [-8.6, -18.4, 0.95],
+  [-13.9, -18.8, 0.82],
+  [-17.1, -22.1, 1.05],
+  [-12.8, -25.4, 0.9],
+] as const) {
+  if (distanceToNearestRoad(rx, rz) < ROAD_SCENERY_CLEARANCE) continue
+  if (onAscentLane(rx, rz, 0.4)) continue
+  scenery.push({ x: rx, z: rz, scale: s, hue: random(), kind: 'rock' })
+}
 
 /**
- * Silverrun bridge deck — shared by walkHeight, river gate, and isWalkable.
- * deckY must match the placed GLB: terrainHeight(6,-2) + landmarkY + deckLocalY * scale
- * ≈ -0.46 + 0.25 + 0.277 * 2.05 ≈ 0.36 (plus a tiny foot bias applied at runtime).
+ * Silverrun bridge deck — shared by walkHeight and bridge FX gates.
+ * Oriented procedural span from build/crossings (not a loose ellipse over the ford).
  */
 export const SILVERRUN_BRIDGE = {
-  x: 6,
-  z: -2,
-  /** Half-extents of the deck ellipse in XZ. */
-  radiusX: 3.5,
-  radiusZ: 2.5,
-  deckY: 0.42,
+  x: SILVERRUN_SPAN.x,
+  z: SILVERRUN_SPAN.z,
+  /** Half-extents along / across the deck axis (compat with older ellipse callers). */
+  radiusX: SILVERRUN_SPAN.halfLength,
+  radiusZ: SILVERRUN_SPAN.halfWidth,
+  deckY: SILVERRUN_SPAN.deckY,
+  axisX: SILVERRUN_SPAN.axisX,
+  axisZ: SILVERRUN_SPAN.axisZ,
 } as const
 
-/**
- * Half-width of the impassable river channel (point sample; add hero radius at runtime).
- * Matches the visual bank strip (createRiverGeometry width 7.4 → half ≈ 3.7) so heroes
- * cannot stand inside the carved bowl / water meshes.
- */
-export const RIVER_HALF_WIDTH = 3.45
-
-export function riverCenter(x: number) {
-  return -2 + Math.sin((x - 6) * 0.095) * 1.65
+/** True when the sample sits in the river channel (bridge deck excluded). */
+export function inRiverChannel(x: number, z: number) {
+  if (onBridgeDeck(x, z)) return false
+  return sampleRiver(x, z).inWater
 }
 
 /**
- * Ellipse membership for the bridge deck.
- * `margin` expands (>0) or shrinks (<0) the ellipse in world units.
+ * Oriented deck membership for the Silverrun span.
+ * `margin` expands (>0) or shrinks (<0) the rectangle in world units.
  */
 export function onBridgeDeck(x: number, z: number, margin = 0) {
-  const rx = SILVERRUN_BRIDGE.radiusX + margin
-  const rz = SILVERRUN_BRIDGE.radiusZ + margin
-  if (rx <= 1e-6 || rz <= 1e-6) return false
-  const bx = (x - SILVERRUN_BRIDGE.x) / rx
-  const bz = (z - SILVERRUN_BRIDGE.z) / rz
-  return bx * bx + bz * bz <= 1
+  return onSpanDeck(SILVERRUN_SPAN, x, z, margin)
 }
 
-/** 1 at deck center → 0 at ellipse edge (and outside). */
+/** 1 at deck center → 0 at span edge (and outside). */
 export function bridgeDeckBlend(x: number, z: number) {
-  const bx = (x - SILVERRUN_BRIDGE.x) / SILVERRUN_BRIDGE.radiusX
-  const bz = (z - SILVERRUN_BRIDGE.z) / SILVERRUN_BRIDGE.radiusZ
-  return Math.max(0, 1 - Math.hypot(bx, bz))
+  return spanDeckBlend(SILVERRUN_SPAN, x, z)
 }
 
-export function terrainHeight(x: number, z: number) {
+function terrainHeightForAscent(x: number, z: number, ascent: AscentSample) {
   const broad = Math.sin(x * 0.085) * 0.52 + Math.cos(z * 0.11) * 0.42
   const rolling = Math.sin((x + z) * 0.13) * 0.25
-  const river = Math.exp(-Math.pow((z - riverCenter(x)) / 4.1, 2)) * 1.25
   const towerRise = Math.exp(-((x - 22) ** 2 + (z + 22) ** 2) / 95) * 2.8
   const farDistance = Math.max(0, -z - 27)
   const farRise = farDistance * farDistance * 0.008
-  return broad + rolling - river + towerRise + farRise
+  // Compact mountain with a broad summit around the far castle.
+  const mistMountain = mistcliffMountainRise(x, z)
+  // Soft shoulder under the stair flight (keeps mesh from floating over a void).
+  const mistShoulder = Math.exp(-((x + 14.5) ** 2 + (z + 23.5) ** 2) / 48) * 1.55
+  // Localized abyss bowl east of the stair lane — fog reads deeper without carving the vale.
+  const abyssDrop = Math.exp(-((x + 7.2) ** 2 + (z + 24.5) ** 2) / 36) * 2.55
+  let base = broad + rolling + towerRise + farRise + mistMountain + mistShoulder - abyssDrop
+
+  // Cut a shallow support channel through the mountain so procedural treads
+  // remain visible instead of being swallowed where the upper flight enters it.
+  const stairY = ascent.walkY
+  const stairMask = ascent.blend
+  if (stairY != null && stairMask > 0 && base > stairY - 0.04) {
+    const t = stairMask * stairMask
+    base += (stairY - 0.04 - base) * t
+  }
+
+  const river = sampleRiver(x, z)
+  if (!river.inBank) return base
+
+  if (river.inWater) {
+    return Math.min(base, river.bedY)
+  }
+
+  const shoreT =
+    (river.distance - river.waterHalfWidth) /
+    Math.max(0.001, river.bankHalfWidth - river.waterHalfWidth)
+  const smooth = shoreT * shoreT * (3 - 2 * shoreT)
+  const shorelineY = WATER_SURFACE_Y + 0.035
+  return shorelineY + (base - shorelineY) * smooth
+}
+
+export function terrainHeight(x: number, z: number) {
+  return terrainHeightForAscent(x, z, sampleAscent(x, z))
 }
 
 /**
- * Surface the party stands on — analytical terrain plus the Silverrun deck.
+ * World-space root position for a landmark — Y comes from the height field,
+ * never from an authored constant. See `grounding.ts` for the contact equation.
+ */
+export function landmarkWorldPosition(landmark: Landmark): [number, number, number] {
+  const [x, z] = landmark.xz
+  const y = groundedRootY({
+    x,
+    z,
+    heightAt: terrainHeight,
+    footLocalY: landmark.footLocalY,
+    scale: landmark.scale,
+    contactBias: landmark.contactBias,
+    padRadius: landmark.padRadius ?? landmarkFootRadius(landmark),
+    padMode: landmark.padMode,
+  })
+  return [x, y, z]
+}
+
+/**
+ * Surface the party stands on — analytical terrain, Silverrun deck, Whispering Ascent.
+ * Fording follows the carved river bowl (gradual walk down), not a lifted water plane.
  * Houses/buildings are solid XZ blockers (see collision.ts); they are not walk surfaces.
  */
 export function walkHeight(x: number, z: number) {
-  const ground = terrainHeight(x, z)
-  const blend = bridgeDeckBlend(x, z)
-  if (blend <= 0) return ground
-  // Smoothstep-ish: quadratic falloff keeps approaches from popping.
-  const t = blend * blend
-  return ground + (SILVERRUN_BRIDGE.deckY - ground) * t
+  const ascent = sampleAscent(x, z)
+  let y = terrainHeightForAscent(x, z, ascent)
+
+  const bridge = bridgeDeckBlend(x, z)
+  if (bridge > 0) {
+    const t = bridge * bridge * (3 - 2 * bridge)
+    y = y + (spanDeckHeight(SILVERRUN_SPAN, x, z) - y) * t
+  }
+
+  if (ascent.blend > 0) {
+    const stairY = ascent.walkY
+    if (stairY != null) {
+      const t = ascent.blend * ascent.blend
+      y = y + (stairY - y) * t
+    }
+  }
+
+  return y
 }
 
 export function sceneryColliderRadius(point: SceneryPoint): number | null {
@@ -289,8 +594,7 @@ export function isWalkable(x: number, z: number) {
   if (x < WORLD_BOUNDS.minX || x > WORLD_BOUNDS.maxX || z < WORLD_BOUNDS.minZ || z > WORLD_BOUNDS.maxZ) {
     return false
   }
-  const inRiver = Math.abs(z - riverCenter(x)) < RIVER_HALF_WIDTH
-  if (inRiver && !onBridgeDeck(x, z)) return false
+  if (!onBridgeDeck(x, z) && sampleRiver(x, z).isDeep) return false
   if (collisionCircles.some((circle) => Math.hypot(circle.x - x, circle.z - z) < circle.radius)) {
     return false
   }

@@ -46,4 +46,10 @@ describe('Minifantasy sprite sheet utilities', () => {
       offset: [0.5, 0],
     })
   })
+
+  it('clamps attack frames instead of looping', () => {
+    expect(frameIndex(0, 6, 'attack')).toBe(0)
+    expect(frameIndex(0.24, 6, 'attack')).toBe(3)
+    expect(frameIndex(0.8, 6, 'attack')).toBe(5)
+  })
 })

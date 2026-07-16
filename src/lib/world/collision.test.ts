@@ -5,6 +5,7 @@ import {
   moveWithCollision,
   overlapsRiver,
   resolveFreePosition,
+  riverBlocksMovement,
   separateFromColliders,
   worldColliders,
 } from './collision'
@@ -13,6 +14,8 @@ import {
   bridgeDeckBlend,
   collisionCircles,
   onBridgeDeck,
+  riverCenter,
+  sampleRiverAxis,
   terrainHeight,
   walkHeight,
 } from './data/sunmereVale'
@@ -22,27 +25,101 @@ describe('hero collision', () => {
     expect(worldColliders.length).toBeGreaterThan(collisionCircles.length)
   })
 
-  it('keeps the bridge crossing open for the hero disc', () => {
+  it('keeps the bridge and authored ford open while deep water blocks', () => {
     expect(isFree(6, -2, HERO_RADIUS)).toBe(true)
-    expect(isFree(-20, -2, HERO_RADIUS)).toBe(false)
+    expect(isFree(-20, -2, HERO_RADIUS)).toBe(true)
+    expect(isFree(-8, riverCenter(-8), HERO_RADIUS)).toBe(false)
   })
 
-  it('uses the walkHeight deck ellipse for the river gate (not a raw X strip)', () => {
+  it('walks from dry bank through the ford to the opposite bank', () => {
+    const ford = sampleRiverAxis(-20)
+    const startOffset = ford.waterHalfWidth + HERO_RADIUS + 0.35
+    let x = ford.x - ford.normalX * startOffset
+    let z = ford.centerZ - ford.normalZ * startOffset
+
+    for (let step = 0; step < 40; step += 1) {
+      const next = moveWithCollision(
+        x,
+        z,
+        ford.normalX * 0.24,
+        ford.normalZ * 0.24,
+        HERO_RADIUS,
+      )
+      x = next.x
+      z = next.z
+    }
+
+    const crossed = (x - ford.x) * ford.normalX + (z - ford.centerZ) * ford.normalZ
+    expect(crossed).toBeGreaterThan(ford.waterHalfWidth + 0.2)
+    expect(riverBlocksMovement(x, z, HERO_RADIUS)).toBe(false)
+  })
+
+  it('emits splash FX in wadable water, excluding bridge and deep core', () => {
     expect(overlapsRiver(SILVERRUN_BRIDGE.x, SILVERRUN_BRIDGE.z, HERO_RADIUS)).toBe(false)
-    // Past the deck ellipse in +X but still inside the river band — must block.
-    // (Old X-strip gate treated |x-6|<~3 as bridge and incorrectly allowed this.)
-    const offDeckX = SILVERRUN_BRIDGE.x + SILVERRUN_BRIDGE.radiusX + 0.2
-    const riverZ = SILVERRUN_BRIDGE.z
-    expect(onBridgeDeck(offDeckX, riverZ)).toBe(false)
-    expect(overlapsRiver(offDeckX, riverZ, HERO_RADIUS)).toBe(true)
+    expect(overlapsRiver(-20, riverCenter(-20), HERO_RADIUS)).toBe(true)
+    // Outer shelf away from the ford / bridge still splashes.
+    const shelfAxis = sampleRiverAxis(-8)
+    const shelf = {
+      x: shelfAxis.x,
+      z: shelfAxis.centerZ + Math.sign(shelfAxis.normalZ || 1) * shelfAxis.waterHalfWidth * 0.75,
+    }
+    expect(overlapsRiver(shelf.x, shelf.z, HERO_RADIUS * 0.35)).toBe(true)
+    expect(riverBlocksMovement(shelf.x, shelf.z, HERO_RADIUS)).toBe(false)
+    // Step off across the deck into deep water.
+    const acrossX = -SILVERRUN_BRIDGE.axisZ
+    const acrossZ = SILVERRUN_BRIDGE.axisX
+    const offX = SILVERRUN_BRIDGE.x + acrossX * (SILVERRUN_BRIDGE.radiusZ + 0.35)
+    const offZ = SILVERRUN_BRIDGE.z + acrossZ * (SILVERRUN_BRIDGE.radiusZ + 0.35)
+    expect(onBridgeDeck(offX, offZ)).toBe(false)
+    expect(overlapsRiver(offX, offZ, HERO_RADIUS)).toBe(false)
+    expect(riverBlocksMovement(offX, offZ, HERO_RADIUS)).toBe(true)
   })
 
-  it('keeps walkHeight lift and collision gate on the same ellipse', () => {
+  it('allows walking the river edge shelf until the deep core', () => {
+    const axis = sampleRiverAxis(-8)
+    const shelfDist = axis.waterHalfWidth * 0.72
+    const shelfX = axis.x
+    const shelfZ = axis.centerZ + Math.sign(axis.normalZ || 1) * shelfDist
+    expect(isFree(shelfX, shelfZ, HERO_RADIUS)).toBe(true)
+    expect(riverBlocksMovement(axis.x, axis.centerZ, HERO_RADIUS)).toBe(true)
+  })
+
+  it('does not twitch-shove when walking the shelf toward deep water', () => {
+    const axis = sampleRiverAxis(-8)
+    const side = Math.sign(axis.normalZ || 1)
+    let x = axis.x
+    let z = axis.centerZ + side * axis.waterHalfWidth * 0.78
+    const towardDeep = -side * 0.18
+    for (let step = 0; step < 24; step += 1) {
+      const next = moveWithCollision(x, z, 0, towardDeep, HERO_RADIUS)
+      // Soft wall: never jump farther than the step plus a tiny clamp.
+      expect(Math.abs(next.z - z)).toBeLessThan(0.22)
+      x = next.x
+      z = next.z
+    }
+    expect(riverBlocksMovement(x, z, HERO_RADIUS)).toBe(false)
+    expect(Math.abs(z - axis.centerZ)).toBeGreaterThan(
+      axis.waterHalfWidth * 0.52 - 0.05,
+    )
+  })
+
+  it('keeps wading FX off the dry shore lip', () => {
+    const axis = sampleRiverAxis(-20)
+    const dryZ = axis.centerZ + Math.sign(axis.normalZ || 1) * (axis.waterHalfWidth + 0.35)
+    expect(overlapsRiver(axis.x, dryZ, HERO_RADIUS)).toBe(false)
+  })
+
+  it('keeps walkHeight lift on the oriented deck', () => {
     const samples: Array<[number, number]> = [
-      [6, -2],
-      [8, -2],
-      [6, -3.5],
-      [9.2, -2],
+      [SILVERRUN_BRIDGE.x, SILVERRUN_BRIDGE.z],
+      [
+        SILVERRUN_BRIDGE.x + SILVERRUN_BRIDGE.axisX * 1.2,
+        SILVERRUN_BRIDGE.z + SILVERRUN_BRIDGE.axisZ * 1.2,
+      ],
+      [
+        SILVERRUN_BRIDGE.x - SILVERRUN_BRIDGE.axisX * 1.2,
+        SILVERRUN_BRIDGE.z - SILVERRUN_BRIDGE.axisZ * 1.2,
+      ],
     ]
     for (const [x, z] of samples) {
       const blend = bridgeDeckBlend(x, z)
@@ -75,9 +152,10 @@ describe('hero collision', () => {
     )
   })
 
-  it('resolves followers out of the river and buildings', () => {
+  it('resolves followers through the river but out of buildings', () => {
     const freedRiver = resolveFreePosition(-20, -2, HERO_RADIUS)
-    expect(overlapsRiver(freedRiver.x, freedRiver.z, HERO_RADIUS)).toBe(false)
+    expect(overlapsRiver(freedRiver.x, freedRiver.z, HERO_RADIUS)).toBe(true)
+    expect(isFree(freedRiver.x, freedRiver.z, HERO_RADIUS)).toBe(true)
 
     const house = collisionCircles[0]
     const freedHouse = resolveFreePosition(house.x, house.z, HERO_RADIUS)
@@ -86,9 +164,12 @@ describe('hero collision', () => {
     )
   })
 
-  it('keeps the hero out of the visual river bank bowl', () => {
-    // Bank mesh half-width ≈ 3.7; collision must cover it.
-    expect(overlapsRiver(-8, 0, HERO_RADIUS)).toBe(true)
-    expect(isFree(-8, 0, HERO_RADIUS)).toBe(false)
+  it('rejects movement into deep water and leaves the hero on the bank', () => {
+    const z = riverCenter(-8)
+    expect(overlapsRiver(-8, z, HERO_RADIUS)).toBe(false)
+    expect(isFree(-8, z, HERO_RADIUS)).toBe(false)
+    const start = { x: -8, z: z + 4.4 }
+    const moved = moveWithCollision(start.x, start.z, 0, -2.2, HERO_RADIUS)
+    expect(riverBlocksMovement(moved.x, moved.z, HERO_RADIUS)).toBe(false)
   })
 })

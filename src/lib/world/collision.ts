@@ -1,15 +1,18 @@
 import {
-  RIVER_HALF_WIDTH,
   WORLD_BOUNDS,
   collisionCircles,
   onBridgeDeck,
-  riverCenter,
+  sampleRiver,
   scenery,
   sceneryColliderRadius,
   type SceneryPoint,
 } from './data/sunmereVale'
+import { SILVERRUN_SHALLOW_WATER01 } from './data/silverrunChannel'
 
 export const HERO_RADIUS = 0.65
+
+/** Tiny pad on the deep core so the wall isn't a knife-edge (not a full body radius). */
+const DEEP_CORE_PAD = 0.06
 
 export type CircleCollider = { x: number; z: number; radius: number }
 
@@ -22,21 +25,45 @@ export const worldColliders: CircleCollider[] = [
   }),
 ]
 
+function deepCoreHalfWidth(waterHalfWidth: number) {
+  return waterHalfWidth * SILVERRUN_SHALLOW_WATER01
+}
+
 /**
- * River channel as an infinite band along riverCenter(x), with a bridge-deck exception.
- * The bridge gate uses the same ellipse as walkHeight so feet and collision agree.
+ * Wading query for splash / ford bob. Requires feet in water — dry shore near
+ * the lip must not flicker the wading animation.
  */
 export function overlapsRiver(x: number, z: number, radius: number) {
   if (onBridgeDeck(x, z, -radius * 0.35)) return false
-  return Math.abs(z - riverCenter(x)) < RIVER_HALF_WIDTH + radius
+  const river = sampleRiver(x, z)
+  // Only the wet surface counts. A hair of foot radius is ok once already in water.
+  if (!river.inWater) return false
+  if (river.fordBlend > 0.35) return true
+  return !river.isDeep
 }
 
-/** Nudge a point out of the river band onto the nearer bank (bridge excluded). */
+/**
+ * Deep core is impassable. Test the foot point (plus a tiny pad), not the full
+ * hero disc — otherwise the pad eats the whole shallow shelf and shove-corrects
+ * every frame (shorefront twitch).
+ */
+export function riverBlocksMovement(x: number, z: number, radius = 0) {
+  if (onBridgeDeck(x, z, -Math.min(radius, DEEP_CORE_PAD))) return false
+  const river = sampleRiver(x, z)
+  if (river.fordBlend > 0.35) return false
+  return river.distance < deepCoreHalfWidth(river.waterHalfWidth) + DEEP_CORE_PAD
+}
+
+/** Nudge feet onto the shallow shelf just outside the deep core. */
 export function pushOutOfRiver(x: number, z: number, radius: number) {
-  if (!overlapsRiver(x, z, radius)) return { x, z }
-  const center = riverCenter(x)
-  const sign = z >= center ? 1 : -1
-  return { x, z: center + sign * (RIVER_HALF_WIDTH + radius + 0.05) }
+  if (!riverBlocksMovement(x, z, radius)) return { x, z }
+  const river = sampleRiver(x, z)
+  const side = river.signedDistance >= 0 ? 1 : -1
+  const target = deepCoreHalfWidth(river.waterHalfWidth) + DEEP_CORE_PAD + 0.02
+  return {
+    x,
+    z: river.centerZ + target * side,
+  }
 }
 
 export function inWorldBounds(x: number, z: number, radius: number) {
@@ -90,19 +117,19 @@ export function separateFromColliders(
 
 /**
  * Project an arbitrary XZ sample onto the nearest free point — used for followers
- * that lerp along a trail and would otherwise tunnel through houses / the river.
+ * that lerp along a trail and would otherwise tunnel through houses.
  */
 export function resolveFreePosition(x: number, z: number, radius = HERO_RADIUS) {
   let pos = separateFromColliders(x, z, radius)
   pos = pushOutOfRiver(pos.x, pos.z, radius)
   pos = separateFromColliders(pos.x, pos.z, radius)
-  if (overlapsRiver(pos.x, pos.z, radius)) pos = pushOutOfRiver(pos.x, pos.z, radius)
+  if (riverBlocksMovement(pos.x, pos.z, radius)) pos = pushOutOfRiver(pos.x, pos.z, radius)
   return clampToWorldBounds(pos.x, pos.z, radius)
 }
 
 export function isFree(x: number, z: number, radius = HERO_RADIUS) {
   if (!inWorldBounds(x, z, radius)) return false
-  if (overlapsRiver(x, z, radius)) return false
+  if (riverBlocksMovement(x, z, radius)) return false
   for (const circle of worldColliders) {
     const minDist = radius + circle.radius
     const dx = x - circle.x
@@ -113,8 +140,8 @@ export function isFree(x: number, z: number, radius = HERO_RADIUS) {
 }
 
 /**
- * Move a disc with axis-separated sliding, then circle separation so
- * the party glides around trees / buildings instead of sticking.
+ * Move a disc with axis-separated sliding. River deep-core is a soft clamp
+ * (slide along the shelf), not a reject/shove fight that twitches the shore.
  */
 export function moveWithCollision(
   x: number,
@@ -128,12 +155,15 @@ export function moveWithCollision(
     const nextZ = fromZ + stepZ
     const separated = separateFromColliders(nextX, nextZ, radius)
     if (!inWorldBounds(separated.x, separated.z, radius)) return { x: fromX, z: fromZ }
-    if (overlapsRiver(separated.x, separated.z, radius)) return { x: fromX, z: fromZ }
-    // Reject if separation shoved us too far (tunneling into a tight gap).
+
+    // Collider tunneling guard — measure before river clamp so shelf slides aren't rejected.
     if (Math.hypot(separated.x - nextX, separated.z - nextZ) > radius * 1.25) {
       return { x: fromX, z: fromZ }
     }
-    return separated
+
+    const cleared = pushOutOfRiver(separated.x, separated.z, radius)
+    if (riverBlocksMovement(cleared.x, cleared.z, radius)) return { x: fromX, z: fromZ }
+    return cleared
   }
 
   let pos = tryAxis(x, z, dx, 0)

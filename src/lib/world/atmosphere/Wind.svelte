@@ -11,7 +11,7 @@
     ShaderMaterial,
     Vector3,
   } from 'three'
-  import { playerLive, reducedMotion } from '../worldState'
+  import { playerLive, reducedMotion, weatherMode } from '../worldState'
   import { WIND, advanceWind, getWindTime, windEnvelope } from './wind'
 
   const LEAF_COUNT = 420
@@ -141,6 +141,14 @@
   useTask((delta) => {
     const motion = $reducedMotion ? 0.12 : 1
     advanceWind(delta, motion)
+
+    // Keep the shared wind clock alive, but hide autumn debris in snowfall.
+    if ($weatherMode === 'snow') {
+      leaves.visible = false
+      streakMaterial.opacity = 0
+      return
+    }
+    leaves.visible = true
 
     const t = getWindTime()
     const { gust, push } = windEnvelope(t)

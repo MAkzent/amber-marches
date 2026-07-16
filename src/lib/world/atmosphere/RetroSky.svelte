@@ -1,16 +1,19 @@
 <script lang="ts">
   import { T, useTask } from '@threlte/core'
   import { BackSide, Color, Mesh, ShaderMaterial, SphereGeometry } from 'three'
-  import { dusk, reducedMotion } from '../worldState'
+  import { dusk, reducedMotion, weatherMode } from '../worldState'
 
   const geometry = new SphereGeometry(260, 32, 20)
   const uniforms = {
     uTime: { value: 0 },
     uDusk: { value: 0 },
+    uSnow: { value: 0 },
     uTopDay: { value: new Color('#315f73') },
     uHorizonDay: { value: new Color('#aa9d70') },
     uTopDusk: { value: new Color('#5d526a') },
     uHorizonDusk: { value: new Color('#efa26e') },
+    uTopSnow: { value: new Color('#6f8fa8') },
+    uHorizonSnow: { value: new Color('#d2dde8') },
   }
 
   const material = new ShaderMaterial({
@@ -32,10 +35,13 @@
       varying vec3 vDirection;
       uniform float uTime;
       uniform float uDusk;
+      uniform float uSnow;
       uniform vec3 uTopDay;
       uniform vec3 uHorizonDay;
       uniform vec3 uTopDusk;
       uniform vec3 uHorizonDusk;
+      uniform vec3 uTopSnow;
+      uniform vec3 uHorizonSnow;
 
       float hash(vec2 p) {
         p = fract(p * vec2(123.34, 456.21));
@@ -88,21 +94,28 @@
         float height = clamp(direction.y * 0.72 + 0.28, 0.0, 1.0);
         vec3 top = mix(uTopDay, uTopDusk, uDusk);
         vec3 horizon = mix(uHorizonDay, uHorizonDusk, uDusk);
+        float snowMix = uSnow * (1.0 - uDusk * 0.55);
+        top = mix(top, uTopSnow, snowMix);
+        horizon = mix(horizon, uHorizonSnow, snowMix);
         vec3 color = mix(horizon, top, smoothstep(0.02, 0.82, height));
 
         vec2 cloudUv = direction.xz / max(0.16, direction.y + 0.36);
         cloudUv = cloudUv * 1.5 + vec2(uTime * 0.006, uTime * 0.0025);
         float cloudField = fbm(cloudUv);
         float cloudBand = smoothstep(-0.02, 0.16, direction.y) * (1.0 - smoothstep(0.44, 0.68, direction.y));
-        float clouds = smoothstep(0.56, 0.73, cloudField) * cloudBand;
+        float cloudThresh = mix(0.56, 0.48, snowMix);
+        float clouds = smoothstep(cloudThresh, cloudThresh + 0.17, cloudField) * cloudBand;
         vec3 cloudLight = mix(vec3(0.58, 0.55, 0.39), vec3(0.68, 0.45, 0.42), uDusk);
-        color = mix(color, cloudLight, clouds * 0.42);
+        cloudLight = mix(cloudLight, vec3(0.78, 0.84, 0.92), snowMix);
+        color = mix(color, cloudLight, clouds * mix(0.42, 0.58, snowMix));
 
         vec3 sunDirection = normalize(vec3(-0.55, 0.48, -0.42));
         float sun = step(0.994, dot(direction, sunDirection));
         float sunHalo = pow(max(dot(direction, sunDirection), 0.0), 54.0);
-        color += vec3(1.0, 0.67, 0.32) * sunHalo * (0.22 + uDusk * 0.28);
-        color = mix(color, vec3(1.0, 0.89, 0.57), sun);
+        vec3 sunWarm = vec3(1.0, 0.67, 0.32);
+        vec3 sunCool = vec3(0.82, 0.90, 1.0);
+        color += mix(sunWarm, sunCool, snowMix) * sunHalo * (0.22 + uDusk * 0.28) * (1.0 - snowMix * 0.45);
+        color = mix(color, mix(vec3(1.0, 0.89, 0.57), vec3(0.94, 0.96, 1.0), snowMix), sun * (1.0 - snowMix * 0.35));
 
         float stars = step(0.997, hash(floor(gl_FragCoord.xy * 0.5))) * smoothstep(0.12, 0.72, direction.y) * uDusk;
         color += vec3(1.0, 0.86, 0.58) * stars * 0.7;
@@ -120,6 +133,7 @@
 
   $effect(() => {
     uniforms.uDusk.value = $dusk ? 1 : 0
+    uniforms.uSnow.value = $weatherMode === 'snow' ? 1 : 0
   })
 
   useTask((delta) => {

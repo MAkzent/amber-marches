@@ -15,7 +15,7 @@
   import { terrainHeight } from '../data/sunmereVale'
   import { WIND, getWindTime, windEnvelope } from '../atmosphere/wind'
   import { gbaToonGradient } from '../render/retroPalette'
-  import { reducedMotion } from '../worldState'
+  import { reducedMotion, weatherMode } from '../worldState'
   import NatureTree from './NatureTree.svelte'
 
   const OAK_MODELS = [
@@ -81,6 +81,13 @@
   pollenAttribute.setUsage(DynamicDrawUsage)
 
   useTask((delta) => {
+    if ($weatherMode === 'snow') {
+      pollen.visible = false
+      pollenMaterial.opacity = 0
+      return
+    }
+    pollen.visible = true
+
     const motion = $reducedMotion ? 0.15 : 1
     const t = getWindTime()
     const { strength, gust, push } = windEnvelope(t)

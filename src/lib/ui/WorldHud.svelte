@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import { fly, fade, scale } from 'svelte/transition'
   import {
+    activeDialogue,
     activeToast,
     audioEnabled,
     completeNearby,
@@ -10,20 +11,26 @@
     nearbyDiscovery,
     objective,
     playerPosition,
+    questSteps,
     resetWorld,
     weatherMode,
     type WeatherMode,
   } from '../world/worldState'
+  import { formatCount, perfStats } from '../world/perfStats'
   import {
     isFullscreenActive,
     subscribeFullscreenChange,
     toggleAppFullscreen,
   } from './fullscreen'
+  import DialogueBox from './DialogueBox.svelte'
+  import ConverseTuningPanel from './ConverseTuningPanel.svelte'
   import VirtualJoystick from './VirtualJoystick.svelte'
 
   let showMenu = $state(false)
+  let showConverseDev = $state(false)
   let fullscreen = $state(false)
   let fullscreenSupported = $state(true)
+  const isDev = import.meta.env.DEV
 
   onMount(() => {
     fullscreen = isFullscreenActive()
@@ -57,11 +64,12 @@
     }
   }
 
-  const weatherOrder: WeatherMode[] = ['sunshower', 'clear', 'fireflies']
+  const weatherOrder: WeatherMode[] = ['sunshower', 'clear', 'fireflies', 'snow']
   const weatherLabel: Record<WeatherMode, string> = {
     sunshower: 'Sunshower',
     clear: 'Leaf-drift',
     fireflies: 'Fireflies',
+    snow: 'Snowfall',
   }
 
   function cycleWeather() {
@@ -75,6 +83,7 @@
 <div
   class="hud-root"
   class:is-intro={$introVisible}
+  class:dialogue-open={Boolean($activeDialogue)}
   data-testid="world-hud"
   data-player-x={$playerPosition[0]}
   data-player-z={$playerPosition[1]}
@@ -118,14 +127,10 @@
         </div>
       </div>
 
-      <div class="progress" aria-label="Discovery progress">
-        <span>Vale resonance</span>
-        <div class="pips">
-          {#each Array(5) as _, index}
-            <i class:lit={index < $discoveryCount}></i>
-          {/each}
-        </div>
-        <b><span>{$discoveryCount}</span> / 5</b>
+      <div class="zone-banner" aria-hidden="true">
+        <i></i>
+        <span>Open World</span>
+        <i></i>
       </div>
 
       <div class="topbar-actions">
@@ -143,21 +148,33 @@
       </div>
     </header>
 
-    <aside class="objective-card" transition:fly={{ x: -12, duration: 420 }}>
-      <div>
-        <span class="eyebrow">Current objective</span>
-        <p>{$objective}</p>
+    <aside class="quest-tracker" transition:fly={{ x: -16, duration: 420 }} aria-label="Quest tracker">
+      <div class="quest-tracker-head">
+        <span class="quest-icon" aria-hidden="true">!</span>
+        <div>
+          <span class="eyebrow">Active Quest</span>
+          <strong>Pilgrim Road</strong>
+        </div>
+        <b class="quest-count">{$discoveryCount}/5</b>
+      </div>
+      <p class="quest-objective">{$objective}</p>
+      <ul class="quest-steps">
+        {#each $questSteps as step}
+          <li class:done={step.done}>
+            <span class="step-mark" aria-hidden="true">{step.done ? '●' : '○'}</span>
+            <span>{step.label}</span>
+          </li>
+        {/each}
+      </ul>
+      <div class="resonance-bar" aria-label="Vale resonance">
+        <span>Vale resonance</span>
+        <div class="pips">
+          {#each Array(5) as _, index}
+            <i class:lit={index < $discoveryCount}></i>
+          {/each}
+        </div>
       </div>
     </aside>
-
-    <div class="mobile-progress" aria-label="Discovery progress">
-      <div class="pips">
-        {#each Array(5) as _, index}
-          <i class:lit={index < $discoveryCount}></i>
-        {/each}
-      </div>
-      <b>{$discoveryCount}/5</b>
-    </div>
 
     <div class="compass" aria-hidden="true" transition:fade={{ duration: 400 }}>
       <span>W</span><i></i><b>N</b><i></i><span>E</span>
@@ -166,6 +183,7 @@
     <footer class="controls" transition:fade={{ duration: 400 }}>
       <span><kbd>WASD</kbd> Travel</span>
       <span><kbd>Shift</kbd> Run</span>
+      <span><kbd>Space</kbd> Jump</span>
       <span><kbd>E</kbd> Interact</span>
     </footer>
 
@@ -173,11 +191,42 @@
       <span>Touch & drag to move</span>
       <span>Tap prompt to interact</span>
     </footer>
+
+    <aside class="perf-panel" aria-label="Performance" transition:fade={{ duration: 400 }}>
+      <div class="perf-fps">
+        <strong>{$perfStats.fps}</strong>
+        <span>FPS</span>
+      </div>
+      <dl class="perf-metrics">
+        <div>
+          <dt>MS</dt>
+          <dd>{$perfStats.ms.toFixed(1)}</dd>
+        </div>
+        <div>
+          <dt>DRAW</dt>
+          <dd>{$perfStats.calls}</dd>
+        </div>
+        <div>
+          <dt>TRIS</dt>
+          <dd>{formatCount($perfStats.triangles)}</dd>
+        </div>
+        <div>
+          <dt>GEO</dt>
+          <dd>{$perfStats.geometries}</dd>
+        </div>
+        <div>
+          <dt>TEX</dt>
+          <dd>{$perfStats.textures}</dd>
+        </div>
+      </dl>
+    </aside>
   {/if}
 
-  <VirtualJoystick />
+  {#if !$introVisible && !$activeDialogue}
+    <VirtualJoystick />
+  {/if}
 
-  {#if !$introVisible && $nearbyDiscovery}
+  {#if !$introVisible && !$activeDialogue && $nearbyDiscovery}
     <button
       class="interaction"
       onclick={completeNearby}
@@ -192,7 +241,14 @@
     </button>
   {/if}
 
-  {#if !$introVisible && $activeToast}
+  {#if !$introVisible && $activeDialogue}
+    <DialogueBox session={$activeDialogue} />
+    {#if isDev && showConverseDev}
+      <ConverseTuningPanel />
+    {/if}
+  {/if}
+
+  {#if !$introVisible && !$activeDialogue && $activeToast}
     <section class="discovery-toast" transition:fly={{ y: 24, duration: 500 }}>
       <span class="crest" aria-hidden="true">✦</span>
       <div>
@@ -226,6 +282,18 @@
         <span>Valley weather</span>
         <b>{weatherLabel[$weatherMode]}</b>
       </button>
+      {#if isDev}
+        <button
+          class="menu-row"
+          onclick={() => {
+            showConverseDev = !showConverseDev
+            showMenu = false
+          }}
+        >
+          <span>Converse tune</span>
+          <b>{showConverseDev ? 'On' : 'Off'}</b>
+        </button>
+      {/if}
       <button class="menu-row" onclick={restart}>
         <span>Begin again</span>
         <b>Reset</b>

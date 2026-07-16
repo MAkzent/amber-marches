@@ -21,7 +21,8 @@ describe('pseudo-3D sprite actor', () => {
     expect(sprite.body.position.y).toBeCloseTo(-0.76)
     expect(sprite.bodyBaseY).toBe(-0.8)
     expect(sprite.root.position.y).toBe(1.25)
-    expect(sprite.shadow.parent).toBe(sprite.root)
+    expect(sprite.mesh.castShadow).toBe(true)
+    expect(sprite.root.children).toEqual([sprite.body])
   })
 
   it('yaws only the body toward the camera (cylindrical billboard)', () => {

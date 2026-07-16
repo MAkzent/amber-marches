@@ -7,10 +7,8 @@
     url: string
     position: [number, number, number]
     rotation?: [number, number, number]
-    scale?: number
+    scale?: number | [number, number, number]
     muted?: boolean
-    /** Drop roof-board primitives so billboard heroes can cross without clipping. */
-    stripHighRoof?: boolean
   }
 
   let {
@@ -19,23 +17,18 @@
     rotation = [0, 0, 0],
     scale = 1,
     muted = false,
-    stripHighRoof = false,
   }: Props = $props()
 
+  const scaleVec = $derived(
+    typeof scale === 'number' ? ([scale, scale, scale] as [number, number, number]) : scale,
+  )
+
   function prepare(gltf: ThrelteGltf) {
-    const roofMeshes: Mesh[] = []
     gltf.scene.traverse((object) => {
       const mesh = object as Mesh
       if (!mesh.isMesh) return
       mesh.castShadow = true
       mesh.receiveShadow = true
-
-      if (stripHighRoof && mesh.geometry) {
-        mesh.geometry.computeBoundingBox()
-        const box = mesh.geometry.boundingBox
-        // KayKit roofed bridge: roof boards live above local y ≈ 0.2.
-        if (box && box.min.y > 0.18) roofMeshes.push(mesh)
-      }
 
       const source = mesh.material as Material
       if (source instanceof MeshStandardMaterial) {
@@ -54,13 +47,6 @@
       }
     })
 
-    for (const mesh of roofMeshes) {
-      mesh.removeFromParent()
-      mesh.geometry.dispose()
-      const mat = mesh.material
-      if (Array.isArray(mat)) mat.forEach((entry) => entry.dispose())
-      else mat.dispose()
-    }
   }
 </script>
 
@@ -68,6 +54,6 @@
   {url}
   {position}
   {rotation}
-  scale={[scale, scale, scale]}
+  scale={scaleVec}
   onload={prepare}
 />

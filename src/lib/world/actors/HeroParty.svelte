@@ -14,21 +14,34 @@
     Vector3,
   } from 'three'
   import {
+    activeDialogue,
     completeNearby,
     dusk,
     introVisible,
+    nearbyDiscovery,
+    partyLive,
     playerLive,
     playerPosition,
+    pulseCombat,
     reducedMotion,
     touchMove,
     updateNearby,
   } from '../worldState'
-  import { walkHeight } from '../data/sunmereVale'
+  import { walkHeight, onAscentLane, riverCenter, WATER_SURFACE_Y } from '../data/sunmereVale'
   import { intersectHeightfield } from '../data/heightfieldPick'
-  import { HERO_RADIUS, moveWithCollision, resolveFreePosition } from '../collision'
+  import { HERO_RADIUS, moveWithCollision, overlapsRiver, resolveFreePosition } from '../collision'
+  import { clearWaterDisturbanceUnit, pushWaterDisturbance } from '../river/riverDisturbance'
+  import {
+    createAttackState,
+    LEADER_ATTACK_LOADOUT,
+    pushAttackSwing,
+    tickAttack,
+    tickAttackSwings,
+    tryActivateSlot,
+    type AttackSlotBinding,
+  } from '../combat'
   import {
     FRAME_HEIGHT,
-    FRAME_WIDTH,
     facingForVelocity,
     facingRow,
     frameIndex,
@@ -41,32 +54,65 @@
   } from './spriteSheet'
   import { createPseudo3DSprite, type Pseudo3DSprite } from './pseudo3dSprite'
 
-  type HeroDefinition = { id: string; idle: string; walk: string; cardHeight: number }
+  type HeroDefinition = {
+    id: string
+    idle: string
+    walk: string
+    /** Optional attack sheet — only the leader needs this for now. */
+    attack?: string
+    cardHeight: number
+  }
   type HeroHandle = {
     sprite: Pseudo3DSprite
     textures: Record<Motion, Texture>
-    /** Gameplay feet on XZ — Y always comes from walkHeight via sprite.plant. */
+    id: string
+    /** Gameplay feet on XZ. */
     x: number
     z: number
+    /** World Y of feet — walkHeight when grounded, arc height while jumping. */
+    footY: number
+    yVelocity: number
+    airborne: boolean
+    /** Seconds before companions may auto-hop again (avoids slope bunny-spam). */
+    stepJumpCooldown: number
     lastFacing: Facing
     motion: Motion
     motionElapsed: number
+    /** Tracks water entry so the first step always stamps a wake. */
+    wasFording: boolean
   }
 
-  /** Minifantasy cells are square; visible feet end at source Y=19 in every sheet. */
-  const FRAME_ASPECT = FRAME_WIDTH / FRAME_HEIGHT
+  /**
+   * Source cells are square, but the pitched camera foreshortens vertical cards.
+   * Match createPseudo3DSprite's default so silhouettes read tall, not squat.
+   */
+  const CARD_ASPECT = 0.72
   const FEET_FROM_TOP = 19
   const TRAIL_STEP = 0.18
   const FOLLOWER_GAP = 9
   const TRAIL_LENGTH = FOLLOWER_GAP * 4 + 12
   const INITIAL_TRAIL_X = 0.63
   const INITIAL_TRAIL_Z = 0.78
+  /** Peak hop ≈ 0.55 units — short, snappy pop. */
+  const JUMP_SPEED = 6.8
+  const GRAVITY = 42
+  /** Lookahead / rise that counts as a terrain step companions should hop. */
+  const STEP_LOOKAHEAD = 0.7
+  const STEP_UP_RISE = 0.14
+  const STEP_JUMP_COOLDOWN = 0.38
+  /** Deliberate climb on the Whispering Ascent — slower feet, clearer step hops. */
+  const ASCENT_SPEED_SCALE = 0.58
+  const ASCENT_STEP_LOOKAHEAD = 0.55
+  const ASCENT_STEP_UP_RISE = 0.1
+  const ASCENT_STEP_JUMP_COOLDOWN = 0.42
+  const ASCENT_JUMP_SPEED = 6.4
 
   const definitions: HeroDefinition[] = [
     {
       id: 'paladin',
       idle: '/assets/minifantasy/heroes/paladin/idle.png',
       walk: '/assets/minifantasy/heroes/paladin/walk.png',
+      attack: '/assets/minifantasy/heroes/paladin/attack.png',
       cardHeight: 3.9,
     },
     {
@@ -82,12 +128,15 @@
       cardHeight: 3.9,
     },
     {
-      id: 'bard',
-      idle: '/assets/minifantasy/heroes/bard/idle.png',
-      walk: '/assets/minifantasy/heroes/bard/walk.png',
+      id: 'assassin',
+      idle: '/assets/minifantasy/heroes/assassin/idle.png',
+      walk: '/assets/minifantasy/heroes/assassin/walk.png',
       cardHeight: 3.9,
     },
   ]
+
+  const leaderAttackLoadout: AttackSlotBinding[] = [...LEADER_ATTACK_LOADOUT]
+  const leaderCombat = createAttackState()
 
   const loader = new TextureLoader()
   // The sprite form shader supplies contrast, edge light, and highlight rolloff;
@@ -106,6 +155,10 @@
   let hasClickTarget = false
   let elapsed = 0
   let publishAccumulator = 0
+  let waterFxAccumulator = 0
+  let waterIdleAccumulator = 0
+  /** How often we *try* to stamp; spacing in riverDisturbance does the real gating. */
+  const WATER_FX_TRY_INTERVAL = 0.08
   const artVista = new URLSearchParams(window.location.search).get('art')
   const initialPosition = get(playerPosition)
   let leaderX = initialPosition[0]
@@ -136,17 +189,19 @@
   function createHero(definition: HeroDefinition, index: number): HeroHandle {
     const idle = loadTexture(definition.idle)
     const walk = loadTexture(definition.walk)
+    const attack = definition.attack ? loadTexture(definition.attack) : idle
     const textures = {
       idle,
       walk,
       run: walk,
+      attack,
     }
     const bodyBaseY =
       -((FRAME_HEIGHT - FEET_FROM_TOP) / FRAME_HEIGHT) * definition.cardHeight
     const sprite = createPseudo3DSprite({
       map: textures.idle,
       height: definition.cardHeight,
-      width: definition.cardHeight * FRAME_ASPECT,
+      width: definition.cardHeight * CARD_ASPECT,
       radius: HERO_RADIUS,
       bodyBaseY,
     })
@@ -162,11 +217,17 @@
     return {
       sprite,
       textures,
+      id: definition.id,
       x: start.x,
       z: start.z,
+      footY: walkHeight(start.x, start.z),
+      yVelocity: 0,
+      airborne: false,
+      stepJumpCooldown: 0,
       lastFacing: 'back-left',
       motion: 'idle',
       motionElapsed: 0,
+      wasFording: false,
     }
   }
 
@@ -186,7 +247,42 @@
   function plantHero(hero: HeroHandle, x: number, z: number) {
     hero.x = x
     hero.z = z
-    hero.sprite.plant(x, z, walkHeight(x, z))
+    hero.sprite.plant(x, z, hero.footY)
+  }
+
+  function startJump(hero: HeroHandle, speed = JUMP_SPEED) {
+    if (hero.airborne) return
+    hero.airborne = true
+    hero.yVelocity = speed
+  }
+
+  /** Integrate vertical motion; call after XZ has been updated for this frame. */
+  function integrateJump(hero: HeroHandle, delta: number) {
+    const groundY = walkHeight(hero.x, hero.z)
+    if (hero.airborne) {
+      hero.footY += hero.yVelocity * delta
+      hero.yVelocity -= GRAVITY * delta
+      if (hero.footY <= groundY && hero.yVelocity <= 0) {
+        hero.footY = groundY
+        hero.yVelocity = 0
+        hero.airborne = false
+      }
+    } else {
+      hero.footY = groundY
+    }
+    hero.sprite.plant(hero.x, hero.z, hero.footY)
+  }
+
+  /** True when terrain ahead rises steeply enough that heroes should hop a tread. */
+  function needsStepUpJump(x: number, z: number, dx: number, dz: number, onStairs: boolean) {
+    const speed = Math.hypot(dx, dz)
+    if (speed < 1e-4) return false
+    const nx = dx / speed
+    const nz = dz / speed
+    const lookahead = onStairs ? ASCENT_STEP_LOOKAHEAD : STEP_LOOKAHEAD
+    const riseThreshold = onStairs ? ASCENT_STEP_UP_RISE : STEP_UP_RISE
+    const rise = walkHeight(x + nx * lookahead, z + nz * lookahead) - walkHeight(x, z)
+    return rise >= riseThreshold
   }
 
   function resetTrail(x: number, z: number) {
@@ -204,6 +300,10 @@
       const position = index === 0
         ? { x: leaderX, z: leaderZ }
         : resolveFreePosition(x, z, HERO_RADIUS * 0.92)
+      hero.airborne = false
+      hero.yVelocity = 0
+      hero.stepJumpCooldown = 0
+      hero.footY = walkHeight(position.x, position.z)
       plantHero(hero, position.x, position.z)
       hero.motion = 'idle'
       hero.motionElapsed = 0
@@ -237,12 +337,14 @@
 
   function onKeyDown(event: KeyboardEvent) {
     keys.add(event.key.toLowerCase())
-    if (artMode && ['1', '2', '3', '4'].includes(event.key)) {
+    if (artMode && ['1', '2', '3', '4', '5', '6'].includes(event.key)) {
       const locations: Record<string, [number, number]> = {
         '1': [-7, 9],
         '2': [6, -2],
         '3': [-17.1, -16],
         '4': [18.8, -22],
+        '5': [-11.2, -17.0],
+        '6': [-20, riverCenter(-20)],
       }
       const [x, z] = locations[event.key]
       leaderX = x
@@ -252,11 +354,34 @@
       hasClickTarget = false
       playerLive.x = x
       playerLive.z = z
+      for (const slot of partyLive) {
+        slot.x = x
+        slot.z = z
+      }
       playerPosition.set([x, z])
       updateNearby(x, z)
+      return
     }
-    if (event.key === 'Enter' || event.key.toLowerCase() === 'e' || event.key === ' ') {
+    if (event.key === '1' && !get(activeDialogue)) {
+      if (tryActivateSlot(leaderCombat, leaderAttackLoadout, 1)) {
+        pulseCombat()
+      }
+      return
+    }
+    if (event.key === ' ') {
       event.preventDefault()
+      if (get(activeDialogue)) return
+      // Interact wins over jump when something is in range.
+      if (get(nearbyDiscovery)) {
+        completeNearby()
+        return
+      }
+      startJump(heroes[0])
+      return
+    }
+    if (event.key === 'Enter' || event.key.toLowerCase() === 'e') {
+      event.preventDefault()
+      if (get(activeDialogue)) return
       completeNearby()
     }
   }
@@ -294,19 +419,36 @@
 
   useTask((delta) => {
     elapsed += delta
+    const attackTick = tickAttack(leaderCombat, delta)
+    tickAttackSwings(delta)
+    if (attackTick.hitModule) {
+      pushAttackSwing(
+        definitions[0].id,
+        attackTick.hitModule.id,
+        leaderX,
+        leaderZ,
+        heroes[0].lastFacing,
+        attackTick.hitModule.range,
+      )
+    }
+
     let inputRight = 0
     let inputForward = 0
-    if (keys.has('a') || keys.has('arrowleft')) inputRight -= 1
-    if (keys.has('d') || keys.has('arrowright')) inputRight += 1
-    if (keys.has('w') || keys.has('arrowup')) inputForward += 1
-    if (keys.has('s') || keys.has('arrowdown')) inputForward -= 1
-    inputRight = Math.max(-1, Math.min(1, inputRight + touchMove.right))
-    inputForward = Math.max(-1, Math.min(1, inputForward + touchMove.forward))
+    if (!get(activeDialogue) && !attackTick.movementLocked) {
+      if (keys.has('a') || keys.has('arrowleft')) inputRight -= 1
+      if (keys.has('d') || keys.has('arrowright')) inputRight += 1
+      if (keys.has('w') || keys.has('arrowup')) inputForward += 1
+      if (keys.has('s') || keys.has('arrowdown')) inputForward -= 1
+      inputRight = Math.max(-1, Math.min(1, inputRight + touchMove.right))
+      inputForward = Math.max(-1, Math.min(1, inputForward + touchMove.forward))
+    }
 
     let moveX = 0
     let moveZ = 0
 
-    if (inputRight || inputForward) {
+    if (get(activeDialogue) || attackTick.movementLocked) {
+      hasClickTarget = false
+    } else if (inputRight || inputForward) {
       hasClickTarget = false
       introVisible.set(false)
       camera.current.getWorldDirection(camForward)
@@ -334,14 +476,27 @@
       const length = Math.hypot(moveX, moveZ)
       moveX /= length
       moveZ /= length
-      const speed = wantsToRun ? 8.4 : 6.1
+      const climbing = onAscentLane(leaderX, leaderZ, 0.35)
+      const baseSpeed = wantsToRun && !climbing ? 8.4 : 6.1
+      const speed = climbing ? baseSpeed * ASCENT_SPEED_SCALE : baseSpeed
       const stepX = moveX * speed * delta
       const stepZ = moveZ * speed * delta
+      const previousX = leaderX
+      const previousZ = leaderZ
       const next = moveWithCollision(leaderX, leaderZ, stepX, stepZ, HERO_RADIUS)
       leaderMovedX = next.x - leaderX
       leaderMovedZ = next.z - leaderZ
       leaderX = next.x
       leaderZ = next.z
+      if (heroes[0].stepJumpCooldown > 0) heroes[0].stepJumpCooldown -= delta
+      if (
+        climbing &&
+        heroes[0].stepJumpCooldown <= 0 &&
+        needsStepUpJump(previousX, previousZ, leaderMovedX, leaderMovedZ, true)
+      ) {
+        startJump(heroes[0], ASCENT_JUMP_SPEED)
+        heroes[0].stepJumpCooldown = ASCENT_STEP_JUMP_COOLDOWN
+      }
     }
 
     const leaderMoving = Math.hypot(leaderMovedX, leaderMovedZ) > 0.001
@@ -350,12 +505,22 @@
     const leaderFacing = facingForVelocity(leaderMovedX, leaderMovedZ, heroes[0].lastFacing)
     heroes[0].lastFacing = leaderFacing
 
-    plantHero(heroes[0], leaderX, leaderZ)
+    heroes[0].x = leaderX
+    heroes[0].z = leaderZ
+    integrateJump(heroes[0], delta)
 
     const cam = camera.current
+    waterFxAccumulator += delta
+    waterIdleAccumulator += delta
+    const emitWaterFx = waterFxAccumulator > WATER_FX_TRY_INTERVAL
+    if (emitWaterFx) waterFxAccumulator = 0
+    const emitIdleRipple = waterIdleAccumulator > 1.1
+    if (emitIdleRipple) waterIdleAccumulator = 0
+
     heroes.forEach((hero, index) => {
       let movedX = leaderMovedX
       let movedZ = leaderMovedZ
+      const onStairs = onAscentLane(hero.x, hero.z, 0.35)
 
       if (index > 0) {
         const trailPoint = trailPointFor(index)
@@ -365,27 +530,91 @@
         const rawX = MathUtils.lerp(hero.x, trailPoint[0], follow)
         const rawZ = MathUtils.lerp(hero.z, trailPoint[1], follow)
         const safe = resolveFreePosition(rawX, rawZ, HERO_RADIUS * 0.92)
-        plantHero(hero, safe.x, safe.z)
-        movedX = hero.x - previousX
-        movedZ = hero.z - previousZ
+        movedX = safe.x - previousX
+        movedZ = safe.z - previousZ
+        hero.x = safe.x
+        hero.z = safe.z
+        if (hero.stepJumpCooldown > 0) hero.stepJumpCooldown -= delta
+        if (
+          hero.stepJumpCooldown <= 0 &&
+          !overlapsRiver(hero.x, hero.z, HERO_RADIUS * 0.35) &&
+          needsStepUpJump(previousX, previousZ, movedX, movedZ, onStairs)
+        ) {
+          startJump(hero, onStairs ? ASCENT_JUMP_SPEED : JUMP_SPEED)
+          hero.stepJumpCooldown = onStairs ? ASCENT_STEP_JUMP_COOLDOWN : STEP_JUMP_COOLDOWN
+        }
+        integrateJump(hero, delta)
         hero.lastFacing = facingForVelocity(movedX, movedZ, hero.lastFacing)
       }
 
       const heroMoving = Math.hypot(movedX, movedZ) > 0.001
-      const motion = motionForMovement(heroMoving, wantsToRun)
+      // Followers lerp in tiny steps — while fording, inherit party motion so wakes match the leader.
+      const waterMoving =
+        heroMoving || (index > 0 && Math.hypot(leaderMovedX, leaderMovedZ) > 0.001)
+      // Stairs force the walk cycle — no sprinting up the mist cliff.
+      // Leader plays attack motion while a combat module is active.
+      const motion =
+        index === 0 && attackTick.active
+          ? attackTick.active.motion
+          : motionForMovement(heroMoving, wantsToRun && !onStairs)
       advanceMotion(hero, motion, delta)
-      const bob = $reducedMotion
-        ? 0
-        : Math.sin(elapsed * (motion === 'run' ? 11 : 7.5) + index * 1.2) *
-          (heroMoving ? 0.035 : 0.006)
+      const fording = overlapsRiver(hero.x, hero.z, HERO_RADIUS * 0.35)
+      const climbBob =
+        onStairs && heroMoving && !hero.airborne && !$reducedMotion
+          ? Math.sin(elapsed * 9.2 + index * 1.4) * 0.048
+          : 0
+      const bob =
+        hero.airborne || $reducedMotion
+          ? 0
+          : Math.sin(elapsed * (motion === 'run' ? 11 : 7.5) + index * 1.2) *
+              (heroMoving ? 0.035 : 0.006) +
+            (fording ? Math.sin(elapsed * 5.4 + index * 1.7) * (heroMoving ? 0.028 : 0.012) : 0) +
+            climbBob
       hero.sprite.setBob(bob)
       hero.sprite.faceCamera(cam)
       hero.sprite.material.color.lerp($dusk ? duskTint : dayTint, 1 - Math.pow(0.02, delta))
       updateSprite(hero, hero.motion, hero.lastFacing, hero.motionElapsed + index * 0.09)
+
+      if (!fording) {
+        if (hero.wasFording) clearWaterDisturbanceUnit(hero.id)
+        hero.wasFording = false
+        return
+      }
+      // Feet sit in the carved bowl below the visual water plane — scale wakes by depth.
+      const enteredWater = !hero.wasFording
+      hero.wasFording = true
+      const fordDepth = Math.max(0, WATER_SURFACE_Y - hero.footY)
+      const depthScale = 0.7 + Math.min(1.15, fordDepth * 2.4)
+      if (enteredWater) {
+        pushWaterDisturbance(
+          hero.x,
+          hero.z,
+          (waterMoving ? 1 : 0.85) * depthScale,
+          fordDepth,
+          hero.id,
+          { force: true },
+        )
+      } else if (waterMoving && emitWaterFx) {
+        pushWaterDisturbance(
+          hero.x,
+          hero.z,
+          (wantsToRun ? 1 : 0.78) * depthScale,
+          fordDepth,
+          hero.id,
+        )
+      } else if (emitIdleRipple) {
+        pushWaterDisturbance(hero.x, hero.z, 0.28 * depthScale, fordDepth, hero.id)
+      }
     })
 
     playerLive.x = leaderX
     playerLive.z = leaderZ
+    for (let i = 0; i < heroes.length; i += 1) {
+      const slot = partyLive[i]
+      if (!slot) continue
+      slot.x = heroes[i].x
+      slot.z = heroes[i].z
+    }
 
     publishAccumulator += delta
     if (publishAccumulator > 0.08) {
