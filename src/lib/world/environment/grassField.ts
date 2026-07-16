@@ -124,10 +124,13 @@ function hash2(x: number, z: number, salt = 0): number {
   return n - Math.floor(n)
 }
 
+/** Desktop meadow step; mobile uses a wider step to cut instance count ~in half. */
+export const GRASS_STEP_DESKTOP = 0.42
+export const GRASS_STEP_MOBILE = 0.72
+
 /** Dense Kenney tuft lattice — each instance is already a multi-blade cluster. */
-export function sampleGrassTufts(): GrassTuft[] {
+export function sampleGrassTufts(step = GRASS_STEP_DESKTOP): GrassTuft[] {
   const tufts: GrassTuft[] = []
-  const step = 0.42
   const { minX, maxX, minZ, maxZ } = WORLD_BOUNDS
 
   for (let gz = minZ; gz <= maxZ; gz += step) {

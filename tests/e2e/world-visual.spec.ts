@@ -73,6 +73,32 @@ test('the Silverrun bridge and shallow ford remain playable', async ({ page }) =
   expect(pageErrors).toEqual([])
 })
 
+test('mobile graphics tier reports live FPS after entering the vale', async ({ browser }) => {
+  const context = await browser.newContext({
+    ...devices['iPhone 13'],
+  })
+  const page = await context.newPage()
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+
+  await page.goto('/')
+  const coarse = await page.evaluate(() => window.matchMedia('(pointer: coarse)').matches)
+  expect(coarse).toBe(true)
+
+  await page.getByRole('button', { name: /Enter the vale/i }).click()
+  await expect(page.getByTestId('perf-panel')).toBeVisible({ timeout: 5000 })
+  // Wait for perfStats publish window (~0.28s) plus a few composer frames.
+  await page.waitForTimeout(1200)
+
+  const fpsText = await page.getByTestId('perf-fps').locator('strong').innerText()
+  const fps = Number(fpsText)
+  expect(Number.isFinite(fps)).toBe(true)
+  expect(fps).toBeGreaterThan(0)
+  expect(pageErrors).toEqual([])
+
+  await context.close()
+})
+
 test('mobile rotation preserves the canvas and framebuffer proportions', async ({ browser }) => {
   const context = await browser.newContext({
     ...devices['iPhone 13'],

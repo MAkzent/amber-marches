@@ -164,6 +164,22 @@ export const cameraMode = writable<CameraMode>({ kind: 'explore' })
 export const introVisible = writable(true)
 export const audioEnabled = writable(false)
 export const reducedMotion = writable(false)
+export type GraphicsTier = 'desktop' | 'mobile'
+
+/** Coarse pointer / touch phones — lower GPU budget (post-FX, grass, particles). */
+export function detectGraphicsTier(
+  media: Pick<MediaQueryList, 'matches'> | null = typeof window === 'undefined'
+    ? null
+    : window.matchMedia('(pointer: coarse)'),
+  touchPoints = typeof navigator === 'undefined' ? 0 : navigator.maxTouchPoints,
+  viewportWidth = typeof window === 'undefined' ? 1280 : window.innerWidth,
+): GraphicsTier {
+  if (media?.matches) return 'mobile'
+  if (touchPoints > 0 && viewportWidth < 900) return 'mobile'
+  return 'desktop'
+}
+
+export const graphicsTier = writable<GraphicsTier>(detectGraphicsTier())
 export const dusk = writable(false)
 export const weatherMode = writable<WeatherMode>('sunshower')
 

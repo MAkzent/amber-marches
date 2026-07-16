@@ -33,7 +33,7 @@
     uniforms: {
       uOpacity: { value: 0 },
       uFoam: { value: new Color(RIVER_PALETTE.foam) },
-      uCore: { value: new Color('#d7efe4') },
+      uCore: { value: new Color('#f0fcff') },
     },
     vertexShader: /* glsl */ `
       varying vec2 vUv;
@@ -103,8 +103,8 @@
     toneMapped: false,
     blending: AdditiveBlending,
     uniforms: {
-      uColor: { value: new Color('#c5ddd2') },
-      uWater: { value: new Color('#6f9f88') },
+      uColor: { value: new Color('#dff8ff') },
+      uWater: { value: new Color('#3ec8e8') },
     },
     vertexShader: /* glsl */ `
       attribute float aAge;

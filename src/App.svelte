@@ -4,9 +4,10 @@
   import WorldHud from './lib/ui/WorldHud.svelte'
   import CrtMonitor from './lib/ui/CrtMonitor.svelte'
   import { createAudioDirector } from './lib/audio/audioDirector'
-  import { reducedMotion } from './lib/world/worldState'
+  import { detectGraphicsTier, graphicsTier, reducedMotion } from './lib/world/worldState'
 
   onMount(() => {
+    graphicsTier.set(detectGraphicsTier())
     const media = window.matchMedia('(prefers-reduced-motion: reduce)')
     const syncMotion = () => reducedMotion.set(media.matches)
     syncMotion()

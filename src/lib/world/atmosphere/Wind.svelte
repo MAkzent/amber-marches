@@ -11,7 +11,8 @@
     ShaderMaterial,
     Vector3,
   } from 'three'
-  import { playerLive, reducedMotion, weatherMode } from '../worldState'
+  import { get } from 'svelte/store'
+  import { graphicsTier, playerLive, reducedMotion, weatherMode } from '../worldState'
   import { WIND, advanceWind, getWindTime, windEnvelope } from './wind'
 
   const LEAF_COUNT = 420
@@ -191,8 +192,9 @@
   })
 
   function geometryDrawForMotion(motion: number) {
-    const count = motion < 0.5 ? Math.round(LEAF_COUNT * 0.28) : LEAF_COUNT
-    leafGeometry.setDrawRange(0, count)
+    const tierScale = get(graphicsTier) === 'mobile' ? 0.45 : 1
+    const motionScale = motion < 0.5 ? 0.28 : 1
+    leafGeometry.setDrawRange(0, Math.round(LEAF_COUNT * tierScale * motionScale))
   }
 
   geometryDrawForMotion(1)

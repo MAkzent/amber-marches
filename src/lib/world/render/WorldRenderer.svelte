@@ -15,10 +15,12 @@
     VignetteEffect,
   } from 'postprocessing'
   import { get } from 'svelte/store'
-  import { cameraMode, combatLive, reducedMotion } from '../worldState'
+  import { cameraMode, combatLive, graphicsTier, reducedMotion } from '../worldState'
   import { samplePerf } from '../perfStats'
   import { calculatePixelGrid } from './pixelGrid'
   import { createSoftTiltShiftEffect } from './softTiltShift'
+
+  const isMobile = get(graphicsTier) === 'mobile'
 
   const CSS_PIXEL_SIZE = 2
   const EXPLORE_VIGNETTE_DARKNESS = 0.26
@@ -126,33 +128,41 @@
   const { scene, renderer, camera, autoRender, renderStage } = useThrelte()
   const composer = new EffectComposer(renderer, { multisampling: 0 })
   const renderPass = new RenderPass(scene, camera.current)
-  const normalPass = new NormalPass(scene, camera.current, {
-    resolutionScale: 0.5,
-  })
-  const ambientOcclusion = new SSAOEffect(camera.current, normalPass.texture, {
-    blendFunction: BlendFunction.MULTIPLY,
-    samples: 4,
-    rings: 2,
-    radius: 0.065,
-    intensity: 1.08,
-    luminanceInfluence: 0.84,
-  })
+  const normalPass = isMobile
+    ? null
+    : new NormalPass(scene, camera.current, {
+        resolutionScale: 0.5,
+      })
+  const ambientOcclusion =
+    isMobile || !normalPass
+      ? null
+      : new SSAOEffect(camera.current, normalPass.texture, {
+          blendFunction: BlendFunction.MULTIPLY,
+          samples: 4,
+          rings: 2,
+          radius: 0.065,
+          intensity: 1.08,
+          luminanceInfluence: 0.84,
+        })
   const bloom = new BloomEffect({
-    intensity: 0.52,
+    intensity: isMobile ? 0.34 : 0.52,
     luminanceThreshold: 0.62,
     luminanceSmoothing: 0.38,
     mipmapBlur: true,
     // Fewer MIP RTs — heavy particle weather was exhausting GPU memory and
     // leaking half-res bloom tiles as solid yellow rectangles.
-    levels: 5,
+    // Mobile: fewer levels to cut fill-rate / RT cost.
+    levels: isMobile ? 3 : 5,
   })
-  const tiltShift = createSoftTiltShiftEffect({
-    offset: EXPLORE_TILT_OFFSET,
-    focusArea: EXPLORE_TILT_FOCUS,
-    feather: EXPLORE_TILT_FEATHER,
-    kernelSize: KernelSize.VERY_SMALL,
-    resolutionScale: 0.55,
-  })
+  const tiltShift = isMobile
+    ? null
+    : createSoftTiltShiftEffect({
+        offset: EXPLORE_TILT_OFFSET,
+        focusArea: EXPLORE_TILT_FOCUS,
+        feather: EXPLORE_TILT_FEATHER,
+        kernelSize: KernelSize.VERY_SMALL,
+        resolutionScale: 0.55,
+      })
   const hd2dGrade = new SunmereHd2dEffect()
   const vignette = new VignetteEffect({
     darkness: 0.26,
@@ -162,15 +172,12 @@
   // postprocessing feeds the same UV into every mainImage in a merged pass, so
   // quantizing UV while bloom/tilt sample their half-res maps paints those
   // maps as hard rectangular slabs — the yellow “arrow area” glitch.
-  const lightingPass = new EffectPass(
-    camera.current,
-    ambientOcclusion,
-    bloom,
-    tiltShift,
-  )
+  const lightingPass = isMobile
+    ? new EffectPass(camera.current, bloom)
+    : new EffectPass(camera.current, ambientOcclusion!, bloom, tiltShift!)
   const gradePass = new EffectPass(camera.current, hd2dGrade, vignette)
   composer.addPass(renderPass)
-  composer.addPass(normalPass)
+  if (normalPass) composer.addPass(normalPass)
   composer.addPass(lightingPass)
   composer.addPass(gradePass)
 
@@ -208,7 +215,7 @@
       // fullscreen changes all update every post-processing render target.
       syncComposerSize()
       renderPass.mainCamera = camera.current
-      normalPass.mainCamera = camera.current
+      if (normalPass) normalPass.mainCamera = camera.current
       lightingPass.mainCamera = camera.current
       gradePass.mainCamera = camera.current
 
@@ -229,11 +236,13 @@
         (COMBAT_VIGNETTE_DARKNESS - EXPLORE_VIGNETTE_DARKNESS) * focusMix
       vignette.offset =
         EXPLORE_VIGNETTE_OFFSET + (COMBAT_VIGNETTE_OFFSET - EXPLORE_VIGNETTE_OFFSET) * focusMix
-      tiltShift.focusArea =
-        EXPLORE_TILT_FOCUS + (COMBAT_TILT_FOCUS - EXPLORE_TILT_FOCUS) * focusMix
-      tiltShift.feather =
-        EXPLORE_TILT_FEATHER + (COMBAT_TILT_FEATHER - EXPLORE_TILT_FEATHER) * focusMix
-      tiltShift.offset = EXPLORE_TILT_OFFSET
+      if (tiltShift) {
+        tiltShift.focusArea =
+          EXPLORE_TILT_FOCUS + (COMBAT_TILT_FOCUS - EXPLORE_TILT_FOCUS) * focusMix
+        tiltShift.feather =
+          EXPLORE_TILT_FEATHER + (COMBAT_TILT_FEATHER - EXPLORE_TILT_FEATHER) * focusMix
+        tiltShift.offset = EXPLORE_TILT_OFFSET
+      }
 
       renderer.info.reset()
       composer.render()
@@ -242,7 +251,7 @@
   )
 
   $effect(() => {
-    bloom.intensity = $reducedMotion ? 0.34 : 0.52
+    bloom.intensity = isMobile || $reducedMotion ? 0.34 : 0.52
   })
 
   onDestroy(() => {

@@ -140,6 +140,12 @@
     pointer-events: auto;
   }
 
+  @media (pointer: coarse) {
+    .tuning-panel {
+      backdrop-filter: none;
+    }
+  }
+
   .tuning-head {
     display: flex;
     align-items: flex-start;

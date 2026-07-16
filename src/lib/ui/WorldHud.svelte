@@ -192,8 +192,8 @@
       <span>Tap prompt to interact</span>
     </footer>
 
-    <aside class="perf-panel" aria-label="Performance" transition:fade={{ duration: 400 }}>
-      <div class="perf-fps">
+    <aside class="perf-panel" aria-label="Performance" data-testid="perf-panel" transition:fade={{ duration: 400 }}>
+      <div class="perf-fps" data-testid="perf-fps">
         <strong>{$perfStats.fps}</strong>
         <span>FPS</span>
       </div>

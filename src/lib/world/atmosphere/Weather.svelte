@@ -9,7 +9,14 @@
     ShaderMaterial,
     Vector2,
   } from 'three'
-  import { playerLive, reducedMotion, weatherMode, type WeatherMode } from '../worldState'
+  import { get } from 'svelte/store'
+  import {
+    graphicsTier,
+    playerLive,
+    reducedMotion,
+    weatherMode,
+    type WeatherMode,
+  } from '../worldState'
   import { WIND, getWindTime, windEnvelope } from './wind'
 
   const MAX = 2800
@@ -178,11 +185,12 @@
   }
 
   function particleCount(mode: WeatherMode) {
-    if (mode === 'sunshower') return 1950
+    const scale = get(graphicsTier) === 'mobile' ? 0.45 : 1
+    if (mode === 'sunshower') return Math.round(1950 * scale)
     // Dense enough to read as snowfall; capped so bloom/SSAO fill-rate stays stable.
-    if (mode === 'snow') return 2100
-    if (mode === 'fireflies') return 520
-    return 280
+    if (mode === 'snow') return Math.round(2100 * scale)
+    if (mode === 'fireflies') return Math.round(520 * scale)
+    return Math.round(280 * scale)
   }
 
   $effect(() => {

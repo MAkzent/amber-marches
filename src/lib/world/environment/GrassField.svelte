@@ -5,12 +5,16 @@
   import type { BufferGeometry, Mesh } from 'three'
   import { HERO_RADIUS } from '../collision'
   import { getWindTime, windEnvelope } from '../atmosphere/wind'
-  import { partyLive, reducedMotion } from '../worldState'
+  import { get } from 'svelte/store'
+  import { graphicsTier, partyLive, reducedMotion } from '../worldState'
   import {
     createKenneyGrassField,
+    GRASS_STEP_DESKTOP,
+    GRASS_STEP_MOBILE,
     KENNEY_GRASS_LEAFS_URL,
     KENNEY_GRASS_URL,
     MAX_BENDERS,
+    sampleGrassTufts,
     type GrassBender,
     type GrassFieldHandle,
   } from './grassField'
@@ -47,7 +51,13 @@
   const loader = new GLTFLoader()
   Promise.all([loader.loadAsync(KENNEY_GRASS_URL), loader.loadAsync(KENNEY_GRASS_LEAFS_URL)])
     .then(([grassGltf, leafGltf]) => {
-      field = createKenneyGrassField(firstMeshGeometry(grassGltf), firstMeshGeometry(leafGltf))
+      const step =
+        get(graphicsTier) === 'mobile' ? GRASS_STEP_MOBILE : GRASS_STEP_DESKTOP
+      field = createKenneyGrassField(
+        firstMeshGeometry(grassGltf),
+        firstMeshGeometry(leafGltf),
+        sampleGrassTufts(step),
+      )
     })
     .catch((error) => {
       console.error('Failed to load Kenney grass assets', error)

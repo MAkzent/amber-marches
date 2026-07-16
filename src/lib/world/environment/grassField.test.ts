@@ -3,6 +3,7 @@ import { BoxGeometry, type Mesh } from 'three'
 import {
   blocksGrass,
   createKenneyGrassField,
+  GRASS_STEP_MOBILE,
   sampleGrassTufts,
 } from './grassField'
 import { collisionCircles, onBridgeDeck, sampleRiver } from '../data/sunmereVale'
@@ -27,6 +28,19 @@ describe('sampleGrassTufts', () => {
     expect(tufts.length).toBeLessThan(45000)
 
     for (const tuft of tufts) {
+      expect(sampleRiver(tuft.x, tuft.z).inBank).toBe(false)
+      expect(onBridgeDeck(tuft.x, tuft.z, 0.55)).toBe(false)
+      expect(blocksGrass(tuft.x, tuft.z)).toBe(false)
+    }
+  })
+
+  it('plants a sparser lawn on the mobile step without water / bridge tufts', () => {
+    const desktop = sampleGrassTufts()
+    const mobile = sampleGrassTufts(GRASS_STEP_MOBILE)
+    expect(mobile.length).toBeLessThan(desktop.length * 0.75)
+    expect(mobile.length).toBeGreaterThan(3000)
+
+    for (const tuft of mobile) {
       expect(sampleRiver(tuft.x, tuft.z).inBank).toBe(false)
       expect(onBridgeDeck(tuft.x, tuft.z, 0.55)).toBe(false)
       expect(blocksGrass(tuft.x, tuft.z)).toBe(false)

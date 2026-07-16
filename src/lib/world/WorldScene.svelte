@@ -11,12 +11,14 @@
   import WorldCamera from './camera/WorldCamera.svelte'
   import DiscoveryMarkers from './environment/DiscoveryMarkers.svelte'
   import WorldRenderer from './render/WorldRenderer.svelte'
-  import { dusk, weatherMode } from './worldState'
+  import { get } from 'svelte/store'
+  import { dusk, graphicsTier, weatherMode } from './worldState'
 
   const sun = new DirectionalLight('#ffc978', 3.25)
   sun.position.set(-32, 34, -24)
   sun.castShadow = true
-  sun.shadow.mapSize.set(1024, 1024)
+  const shadowMapSize = get(graphicsTier) === 'mobile' ? 512 : 1024
+  sun.shadow.mapSize.set(shadowMapSize, shadowMapSize)
   sun.shadow.camera.left = -48
   sun.shadow.camera.right = 48
   sun.shadow.camera.top = 44

@@ -8,6 +8,7 @@ import {
   combatLive,
   completedDiscoveries,
   completeNearby,
+  detectGraphicsTier,
   discoveries,
   dusk,
   markDialogueReady,
@@ -105,5 +106,19 @@ describe('combat engagement', () => {
     const riseIn = combatLive.intensity
 
     expect(dropOut).toBeLessThan(riseIn)
+  })
+})
+
+describe('detectGraphicsTier', () => {
+  it('treats coarse pointer as mobile', () => {
+    expect(detectGraphicsTier({ matches: true }, 0, 1280)).toBe('mobile')
+  })
+
+  it('treats narrow touch viewports as mobile', () => {
+    expect(detectGraphicsTier({ matches: false }, 5, 390)).toBe('mobile')
+  })
+
+  it('keeps desktop for fine pointer without touch', () => {
+    expect(detectGraphicsTier({ matches: false }, 0, 1440)).toBe('desktop')
   })
 })

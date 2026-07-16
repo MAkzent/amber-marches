@@ -1248,3 +1248,17 @@ kbd {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Touch / coarse pointer: drop compositor blur over the WebGL canvas. */
+@media (pointer: coarse) {
+  .stick-base,
+  .round-button,
+  .quest-tracker,
+  .intro-fullscreen,
+  .interaction,
+  .discovery-toast,
+  .perf-panel,
+  .menu {
+    backdrop-filter: none;
+  }
+}

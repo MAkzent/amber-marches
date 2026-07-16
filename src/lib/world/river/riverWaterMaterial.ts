@@ -5,8 +5,8 @@ import { RIVER_OUTPUT_CHUNK } from './riverShaderChunks'
 
 /**
  * Stylized translucent Silverrun water — shallow shelves go clear with visible
- * surface waves; deep channel keeps a soft teal film. Caustics use one low-freq
- * voronoi with world-ish isotropic flow UVs so ribbon stretch stays soft.
+ * surface waves; deep channel keeps a shining anime cyan film. Caustics use one
+ * low-freq voronoi with world-ish isotropic flow UVs so ribbon stretch stays soft.
  * No reflections.
  */
 export type RiverWaterMaterial = ShaderMaterial & {
@@ -31,8 +31,8 @@ export function createRiverWaterMaterial(): RiverWaterMaterial {
       uTime: { value: 0 },
       uMotion: { value: 1 },
       uFoam: { value: new Color(RIVER_PALETTE.foam) },
-      uHighlight: { value: new Color('#dff3ea') },
-      uDeepAccent: { value: new Color('#243842') },
+      uHighlight: { value: new Color('#eefbff') },
+      uDeepAccent: { value: new Color('#0a6a92') },
       uDisturb0: disturbanceUniforms[0],
       uDisturb1: disturbanceUniforms[1],
       uDisturb2: disturbanceUniforms[2],
@@ -160,22 +160,22 @@ export function createRiverWaterMaterial(): RiverWaterMaterial {
         vec3 waveN = normalize(vec3((hL - hR) * uMotion, 1.45, (hD - hU) * uMotion));
 
         float across = vFlow.x;
-        // aFlow.y = flowDistance * 0.085. Keep across/along isotropic (~0.5/m)
-        // so cells stay round under ribbon stretch — just denser than the zebra pass.
-        float drift = vFlow.y * 5.5 - t * 0.05;
-        float sway = sin(drift * 1.1 + t * 0.22) * 0.05;
-        vec2 cauUv = vec2((across - 0.5) * 3.2 + sway, drift);
+        // aFlow.y = flowDistance * 0.085. Keep across/along isotropic so cells
+        // stay round under ribbon stretch — denser for finer anime caustic detail.
+        float drift = vFlow.y * 8.8 - t * 0.055;
+        float sway = sin(drift * 1.1 + t * 0.22) * 0.04;
+        vec2 cauUv = vec2((across - 0.5) * 5.1 + sway, drift);
         float edge = voronoiEdge(cauUv, t * 0.32);
-        // Softer, narrower bands — readable without loud zebra stripes.
-        float web = 1.0 - smoothstep(0.02, 0.11, edge);
-        float streak = sin(drift * 2.8 + across * 2.0) * 0.5 + 0.5;
-        streak = smoothstep(0.7, 0.95, streak) * 0.14;
+        // Thin soft bands — more cells, quieter ink.
+        float web = 1.0 - smoothstep(0.015, 0.08, edge);
+        float streak = sin(drift * 3.4 + across * 2.4) * 0.5 + 0.5;
+        streak = smoothstep(0.74, 0.96, streak) * 0.1;
         float centerMask = 1.0 - smoothstep(0.72, 0.98, abs(across * 2.0 - 1.0));
-        float lines = max(web * 0.75, streak) * centerMask;
+        float lines = max(web * 0.8, streak) * centerMask;
 
         float fresnel = pow(1.0 - max(0.0, dot(waveN, normalize(vViewDir))), 2.0);
         float crest = pow(max(0.0, waveN.x * 0.45 + waveN.z * 0.35 + 0.5), 2.4);
-        float crestLine = smoothstep(0.55, 0.92, crest) * lines * 0.18;
+        float crestLine = smoothstep(0.55, 0.92, crest) * lines * 0.14;
 
         float ripples =
           rippleField(uDisturb0, xz) +
@@ -191,20 +191,21 @@ export function createRiverWaterMaterial(): RiverWaterMaterial {
         foam += ripples * 0.35;
         foam = clamp(foam, 0.0, 1.0);
 
-        // Caustic tint stays in the foam/teal range — avoid bright white highlights.
-        vec3 cauTint = mix(uDeepAccent, uFoam, 0.55);
+        // Quiet cyan caustic web — denser lines, softer color lift.
+        vec3 cauTint = mix(uDeepAccent, uHighlight, 0.44);
         vec3 col = vColor;
         // Extra bank→center darkening so the film gradient lifts the caustics.
-        col = mix(col, uDeepAccent, vDepth * 0.34 * (1.0 - vFord));
-        col = mix(col, cauTint, lines * 0.22 + crestLine * 0.12 + fresnel * 0.03);
-        col = mix(col, uFoam, foam * 0.55);
-        col += uFoam * ripples * 0.12;
-        col = mix(col, uHighlight, clamp(ripples * 0.14, 0.0, 0.22));
+        col = mix(col, uDeepAccent, vDepth * 0.28 * (1.0 - vFord));
+        col = mix(col, cauTint, lines * 0.092 + crestLine * 0.058 + fresnel * 0.1);
+        col = mix(col, uFoam, foam * 0.5);
+        col += uHighlight * (fresnel * 0.16 + crestLine * 0.081 + lines * 0.029);
+        col += uFoam * ripples * 0.14;
+        col = mix(col, uHighlight, clamp(ripples * 0.18 + crest * 0.06, 0.0, 0.28));
 
-        float bodyAlpha = mix(0.12, 0.38, vDepth);
-        bodyAlpha = mix(bodyAlpha, 0.07, vFord * shallow);
-        float lineAlpha = lines * mix(0.1, 0.24, shallow) + crestLine * 0.1 + foam * 0.55;
-        float alpha = clamp(bodyAlpha + lineAlpha + ripples * 0.12, 0.05, 0.78);
+        float bodyAlpha = mix(0.16, 0.44, vDepth);
+        bodyAlpha = mix(bodyAlpha, 0.09, vFord * shallow);
+        float lineAlpha = lines * mix(0.041, 0.092, shallow) + crestLine * 0.046 + foam * 0.5;
+        float alpha = clamp(bodyAlpha + lineAlpha + ripples * 0.12 + fresnel * 0.06, 0.06, 0.82);
 
         gl_FragColor = vec4(col, alpha);
         ${RIVER_OUTPUT_CHUNK}
