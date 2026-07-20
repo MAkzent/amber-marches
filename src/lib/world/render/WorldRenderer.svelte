@@ -19,6 +19,7 @@
   import { samplePerf } from '../perfStats'
   import { calculatePixelGrid } from './pixelGrid'
   import { createSoftTiltShiftEffect } from './softTiltShift'
+  import { combatImpact } from '../combat'
 
   const isMobile = get(graphicsTier) === 'mobile'
 
@@ -207,6 +208,8 @@
   autoRender.set(false)
   /** Eased 0..1 so dialogue vignette matches combat punch-in / soft release. */
   let converseVignette = 0
+  let impactSerial = combatImpact.serial
+  let impactFlash = 0
   const task = renderStage.createTask(
     Symbol('storybook-postprocessing'),
     (delta) => {
@@ -220,6 +223,12 @@
       gradePass.mainCamera = camera.current
 
       const wantConverse = get(cameraMode).kind === 'converse' ? 1 : 0
+      if (combatImpact.serial !== impactSerial) {
+        impactSerial = combatImpact.serial
+        impactFlash = $reducedMotion ? 0.14 : 0.7 * combatImpact.strength
+      }
+      impactFlash *= Math.pow(0.00008, delta)
+      bloom.intensity = (isMobile || $reducedMotion ? 0.34 : 0.52) + impactFlash * 0.28
       if ($reducedMotion) {
         converseVignette = wantConverse
       } else {

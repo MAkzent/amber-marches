@@ -46,6 +46,15 @@ export function frameIndex(elapsed: number, frameCount: number, motion: Motion) 
   return Math.min(frameCount - 1, raw)
 }
 
+export function oneShotFrameIndex(
+  elapsed: number,
+  frameCount: number,
+  frameSeconds: number,
+) {
+  if (frameCount <= 1) return 0
+  return Math.min(frameCount - 1, Math.floor(elapsed / Math.max(0.001, frameSeconds)))
+}
+
 export function textureColumns(imageWidth: number) {
   return Math.max(1, Math.round(imageWidth / FRAME_WIDTH))
 }

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&family=VT323&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bungee&family=Pixelify+Sans:wght@400;500;600;700&family=VT323&display=swap');
 
 :root {
   font-family: var(--font-ui);
@@ -9,6 +9,7 @@
   -webkit-font-smoothing: antialiased;
   --font-ui: 'Pixelify Sans', system-ui, sans-serif;
   --font-mono: 'VT323', monospace;
+  --font-damage: 'Bungee', 'Pixelify Sans', system-ui, sans-serif;
   --text: #f5f7fa;
   --muted: #b8c0cc;
   --night: #090d15;
@@ -298,8 +299,59 @@ button:focus-visible {
 }
 
 .mobile-hint,
-.hint-mobile {
+.hint-mobile,
+.combat-attack-button {
   display: none;
+}
+
+.combat-attack-button {
+  position: absolute;
+  z-index: 24;
+  right: 20px;
+  bottom: 88px;
+  width: 68px;
+  height: 68px;
+  place-items: center;
+  border: 3px solid rgba(255, 248, 224, 0.92);
+  border-radius: 50%;
+  color: #fff7dc;
+  background:
+    radial-gradient(circle at 36% 28%, rgba(255, 155, 94, 0.85), transparent 34%),
+    #a93436;
+  box-shadow:
+    0 5px 0 #531d24,
+    0 8px 18px rgba(0, 0, 0, 0.4),
+    inset 0 0 0 3px rgba(74, 20, 26, 0.38);
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.combat-attack-button:active {
+  transform: translateY(3px) scale(0.96);
+  box-shadow:
+    0 2px 0 #531d24,
+    0 5px 12px rgba(0, 0, 0, 0.38),
+    inset 0 0 0 3px rgba(74, 20, 26, 0.38);
+}
+
+.combat-attack-button span,
+.combat-attack-button strong {
+  display: block;
+  line-height: 1;
+  text-shadow: 0 2px 0 rgba(61, 12, 16, 0.7);
+}
+
+.combat-attack-button span {
+  font-family: var(--font-damage);
+  font-size: 1.15rem;
+}
+
+.combat-attack-button strong {
+  margin-top: 3px;
+  font-size: 0.52rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }
 
 .quest-tracker {
@@ -1060,6 +1112,12 @@ kbd {
     display: none;
   }
 
+  .combat-attack-button {
+    display: grid;
+    right: calc(18px + env(safe-area-inset-right, 0px));
+    bottom: calc(82px + env(safe-area-inset-bottom, 0px));
+  }
+
   .perf-panel {
     right: calc(10px + env(safe-area-inset-right, 0px));
     bottom: calc(12px + env(safe-area-inset-bottom, 0px));
@@ -1218,6 +1276,13 @@ kbd {
 
   .interaction {
     bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .combat-attack-button {
+    right: calc(18px + env(safe-area-inset-right, 0px));
+    bottom: calc(62px + env(safe-area-inset-bottom, 0px));
+    width: 62px;
+    height: 62px;
   }
 
   .discovery-toast {

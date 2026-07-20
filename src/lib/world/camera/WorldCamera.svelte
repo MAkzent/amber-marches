@@ -14,6 +14,7 @@
   } from '../worldState'
   import { walkHeight } from '../data/sunmereVale'
   import { converseTuning } from './converseTuning'
+  import { combatImpact } from '../combat'
 
   let cameraRef = $state<PerspectiveCamera>()
   /** Pulled back so the vale reads as a JRPG diorama, not a close third-person shot. */
@@ -54,6 +55,10 @@
   let converseBlend = 0
   let framed = false
   let posInitialized = false
+  let impactSerial = combatImpact.serial
+  let shakeElapsed = 0
+  let shakeDuration = 0
+  let shakeStrength = 0
 
   function onWheel(event: WheelEvent) {
     if (get(cameraMode).kind === 'converse') return
@@ -186,6 +191,20 @@
     currentLook.lerp(blendedLook, camEase)
 
     cameraRef.position.copy(currentPos)
+    if (combatImpact.serial !== impactSerial) {
+      impactSerial = combatImpact.serial
+      shakeElapsed = 0
+      shakeDuration = 0.18
+      shakeStrength = combatImpact.strength
+    }
+    if (!$reducedMotion && shakeElapsed < shakeDuration) {
+      shakeElapsed += delta
+      const envelope = Math.max(0, 1 - shakeElapsed / shakeDuration) ** 2
+      const punch = envelope * shakeStrength
+      cameraRef.position.x += Math.sin(shakeElapsed * 91) * 0.12 * punch
+      cameraRef.position.y += Math.sin(shakeElapsed * 137 + 0.7) * 0.07 * punch
+      cameraRef.position.z += Math.sin(shakeElapsed * 113 + 1.4) * 0.1 * punch
+    }
     cameraRef.up.set(0, 1, 0)
     cameraRef.lookAt(currentLook)
 

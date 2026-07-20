@@ -17,12 +17,14 @@
     type WeatherMode,
   } from '../world/worldState'
   import { formatCount, perfStats } from '../world/perfStats'
+  import { requestAbilitySlot } from '../world/combat'
   import {
     isFullscreenActive,
     subscribeFullscreenChange,
     toggleAppFullscreen,
   } from './fullscreen'
   import DialogueBox from './DialogueBox.svelte'
+  import CombatOverlay from './CombatOverlay.svelte'
   import ConverseTuningPanel from './ConverseTuningPanel.svelte'
   import VirtualJoystick from './VirtualJoystick.svelte'
 
@@ -118,6 +120,9 @@
       </div>
     </section>
   {:else}
+    {#if !$activeDialogue}
+      <CombatOverlay />
+    {/if}
     <header class="topbar" transition:fade={{ duration: 500 }}>
       <div class="region-mark" aria-label="Current region">
         <span class="sigil" aria-hidden="true">SV</span>
@@ -185,6 +190,7 @@
       <span><kbd>Shift</kbd> Run</span>
       <span><kbd>Space</kbd> Jump</span>
       <span><kbd>E</kbd> Interact</span>
+      <span><kbd>1</kbd> Attack</span>
     </footer>
 
     <footer class="mobile-hint" transition:fade={{ duration: 400 }}>
@@ -224,6 +230,17 @@
 
   {#if !$introVisible && !$activeDialogue}
     <VirtualJoystick />
+    <button
+      class="combat-attack-button"
+      aria-label="Attack"
+      onpointerdown={(event) => {
+        event.preventDefault()
+        requestAbilitySlot(1)
+      }}
+    >
+      <span>1</span>
+      <strong>Hit</strong>
+    </button>
   {/if}
 
   {#if !$introVisible && !$activeDialogue && $nearbyDiscovery}

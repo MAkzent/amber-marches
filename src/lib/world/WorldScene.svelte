@@ -7,6 +7,9 @@
   import Scenery from './environment/Scenery.svelte'
   import Atmosphere from './atmosphere/Atmosphere.svelte'
   import HeroParty from './actors/HeroParty.svelte'
+  import PassiveEnemies from './actors/PassiveEnemies.svelte'
+  import CombatHitFx from './combat/CombatHitFx.svelte'
+  import LootDrops from './loot/LootDrops.svelte'
   import ValeNpc from './actors/ValeNpc.svelte'
   import WorldCamera from './camera/WorldCamera.svelte'
   import DiscoveryMarkers from './environment/DiscoveryMarkers.svelte'
@@ -66,4 +69,7 @@
 <Scenery />
 <DiscoveryMarkers />
 <ValeNpc />
+<PassiveEnemies />
+<CombatHitFx />
+<LootDrops />
 <HeroParty />

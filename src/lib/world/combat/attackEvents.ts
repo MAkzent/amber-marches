@@ -9,6 +9,7 @@ import type { AttackSwingEvent } from './types'
 export const MAX_ATTACK_SWINGS = 12
 
 const swings: AttackSwingEvent[] = []
+let nextSwingId = 1
 
 export function getAttackSwings() {
   return swings
@@ -20,10 +21,21 @@ export function pushAttackSwing(
   x: number,
   z: number,
   facing: Facing,
-  range: number,
+  targetId?: string,
 ) {
   if (swings.length >= MAX_ATTACK_SWINGS) swings.shift()
-  swings.push({ attackerId, moduleId, x, z, facing, range, age: 0 })
+  const swing = {
+    id: nextSwingId++,
+    attackerId,
+    moduleId,
+    x,
+    z,
+    facing,
+    targetId,
+    age: 0,
+  }
+  swings.push(swing)
+  return swing
 }
 
 export function tickAttackSwings(delta: number) {
@@ -32,4 +44,8 @@ export function tickAttackSwings(delta: number) {
     swing.age += delta
     if (swing.age > 0.35) swings.splice(index, 1)
   }
+}
+
+export function clearAttackSwings() {
+  swings.length = 0
 }

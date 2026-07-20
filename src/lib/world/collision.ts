@@ -119,10 +119,18 @@ export function separateFromColliders(
  * Project an arbitrary XZ sample onto the nearest free point — used for followers
  * that lerp along a trail and would otherwise tunnel through houses.
  */
-export function resolveFreePosition(x: number, z: number, radius = HERO_RADIUS) {
-  let pos = separateFromColliders(x, z, radius)
+export function resolveFreePosition(
+  x: number,
+  z: number,
+  radius = HERO_RADIUS,
+  dynamicColliders: CircleCollider[] = [],
+) {
+  const colliders = dynamicColliders.length
+    ? [...worldColliders, ...dynamicColliders]
+    : worldColliders
+  let pos = separateFromColliders(x, z, radius, colliders)
   pos = pushOutOfRiver(pos.x, pos.z, radius)
-  pos = separateFromColliders(pos.x, pos.z, radius)
+  pos = separateFromColliders(pos.x, pos.z, radius, colliders)
   if (riverBlocksMovement(pos.x, pos.z, radius)) pos = pushOutOfRiver(pos.x, pos.z, radius)
   return clampToWorldBounds(pos.x, pos.z, radius)
 }
@@ -149,11 +157,15 @@ export function moveWithCollision(
   dx: number,
   dz: number,
   radius = HERO_RADIUS,
+  dynamicColliders: CircleCollider[] = [],
 ) {
+  const colliders = dynamicColliders.length
+    ? [...worldColliders, ...dynamicColliders]
+    : worldColliders
   const tryAxis = (fromX: number, fromZ: number, stepX: number, stepZ: number) => {
     const nextX = fromX + stepX
     const nextZ = fromZ + stepZ
-    const separated = separateFromColliders(nextX, nextZ, radius)
+    const separated = separateFromColliders(nextX, nextZ, radius, colliders)
     if (!inWorldBounds(separated.x, separated.z, radius)) return { x: fromX, z: fromZ }
 
     // Collider tunneling guard — measure before river clamp so shelf slides aren't rejected.

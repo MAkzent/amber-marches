@@ -5,9 +5,11 @@ import {
   frameIndex,
   frameUv,
   motionForMovement,
+  oneShotFrameIndex,
   textureColumns,
   textureRows,
 } from './spriteSheet'
+import { attackAnimationFor } from './attackAnimations'
 
 describe('Minifantasy sprite sheet utilities', () => {
   it('maps movement quadrants to facing labels', () => {
@@ -51,5 +53,20 @@ describe('Minifantasy sprite sheet utilities', () => {
     expect(frameIndex(0, 6, 'attack')).toBe(0)
     expect(frameIndex(0.24, 6, 'attack')).toBe(3)
     expect(frameIndex(0.8, 6, 'attack')).toBe(5)
+  })
+
+  it('holds the final frame of enemy hit and death reactions', () => {
+    expect(oneShotFrameIndex(0.21, 4, 0.1)).toBe(2)
+    expect(oneShotFrameIndex(8, 34, 0.1)).toBe(33)
+    expect(oneShotFrameIndex(8, 32, 0.2)).toBe(31)
+  })
+
+  it('maps the paladin impact to the hammer-down animation frame', () => {
+    const animation = attackAnimationFor('paladin', 'auto-attack')!
+    const impactTime = animation.impactFrame * animation.frameSeconds
+
+    expect(animation.impactFrame).toBe(4)
+    expect(frameIndex(impactTime - 0.001, animation.frameCount, 'attack')).toBe(3)
+    expect(frameIndex(impactTime, animation.frameCount, 'attack')).toBe(4)
   })
 })

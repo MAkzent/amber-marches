@@ -11,11 +11,14 @@ test('opening vista renders and the first discovery is playable', async ({ page 
   await page.screenshot({ path: 'test-results/opening-vista.png' })
 
   await page.getByRole('button', { name: /Enter the vale/i }).click()
-  await page.keyboard.down('w')
-  await page.waitForTimeout(2800)
-  await page.keyboard.up('w')
-
   const speakButton = page.getByRole('button', { name: /Speak The Bellkeeper/i })
+  // Move in short steps so the test stops inside the interaction radius instead
+  // of relying on frame-rate-dependent travel distance.
+  for (let step = 0; step < 24 && !(await speakButton.isVisible()); step += 1) {
+    await page.keyboard.down('w')
+    await page.waitForTimeout(140)
+    await page.keyboard.up('w')
+  }
   await expect(speakButton).toBeVisible({ timeout: 5000 })
   await speakButton.click()
   // Camera frames the speaker before the bubble appears.
@@ -34,12 +37,92 @@ test('opening vista renders and the first discovery is playable', async ({ page 
   expect(pageErrors).toEqual([])
 })
 
+test('passive enemies take cleave damage and stay defeated', async ({ page }) => {
+  test.setTimeout(45_000)
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+
+  await page.goto('/?art=combat')
+  await page.getByRole('button', { name: /Enter the vale/i }).click()
+  await page.waitForTimeout(950)
+
+  const gargoyle = page.getByTestId('enemy-health-gargoyle-sentinel')
+  await expect(gargoyle).toBeVisible({ timeout: 5000 })
+  await expect(page.getByTestId('enemy-health-bramble-gnoll')).toBeVisible()
+  await expect(page.getByTestId('enemy-health-silverrun-rat')).toBeVisible()
+
+  await page.keyboard.press('1')
+  await expect(page.getByTestId('damage-number').first()).toBeVisible({ timeout: 2000 })
+  const healthBars = page.locator('[data-testid^="enemy-health-"]')
+  await expect
+    .poll(async () =>
+      healthBars.evaluateAll((nodes) =>
+        nodes.some(
+          (node) =>
+            Number(node.getAttribute('data-health')) <
+            Number(node.getAttribute('data-max-health')),
+        ),
+      ),
+    )
+    .toBe(true)
+  await page.screenshot({ path: 'test-results/combat-impact.png' })
+
+  for (let swing = 0; swing < 5; swing += 1) {
+    await page.waitForTimeout(650)
+    await page.keyboard.press('1')
+  }
+  await expect.poll(() => healthBars.count()).toBeLessThan(3)
+  await page.screenshot({ path: 'test-results/combat-defeat.png' })
+
+  expect(pageErrors).toEqual([])
+})
+
 test('the HUD remains legible in a narrow viewport', async ({ page }) => {
   await page.setViewportSize({ width: 430, height: 760 })
   await page.goto('/')
   await page.waitForTimeout(1800)
   await expect(page.getByRole('button', { name: /Enter the vale/i })).toBeVisible()
   await page.screenshot({ path: 'test-results/narrow-vista.png' })
+})
+
+test('obstructing trees fade for the controlled character across camera framings', async ({ page }) => {
+  const pageErrors: string[] = []
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+
+  await page.goto('/?art=trees')
+  await page.getByRole('button', { name: /Enter the vale/i }).click()
+  await page.waitForTimeout(1200)
+  await page.screenshot({ path: 'test-results/tree-occlusion.png' })
+
+  // Combat narrows the camera while the same near canopy remains readable.
+  await page.keyboard.press('1')
+  await page.waitForTimeout(450)
+  await page.screenshot({ path: 'test-results/tree-occlusion-combat.png' })
+
+  // Move laterally off the sight line and allow the tree to restore.
+  await page.keyboard.down('a')
+  await page.waitForTimeout(900)
+  await page.keyboard.up('a')
+  await page.waitForTimeout(650)
+  await page.screenshot({ path: 'test-results/tree-occlusion-clear.png' })
+
+  await page.setViewportSize({ width: 430, height: 760 })
+  await page.goto('/?art=trees')
+  await page.getByRole('button', { name: /Enter the vale/i }).click()
+  await page.waitForTimeout(900)
+  await page.screenshot({ path: 'test-results/tree-occlusion-narrow.png' })
+
+  expect(pageErrors).toEqual([])
+})
+
+test('mobile combat exposes a touch attack control', async ({ page }) => {
+  await page.setViewportSize({ width: 430, height: 760 })
+  await page.goto('/?art=combat')
+  await page.getByRole('button', { name: /Enter the vale/i }).click()
+  await page.waitForTimeout(950)
+  await expect(page.getByRole('button', { name: 'Attack' })).toBeVisible()
+  await expect(page.getByTestId('enemy-health-gargoyle-sentinel')).toBeVisible()
+  await page.screenshot({ path: 'test-results/mobile-combat.png' })
 })
 
 test('the Silverrun bridge and shallow ford remain playable', async ({ page }) => {

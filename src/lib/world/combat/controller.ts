@@ -1,6 +1,7 @@
 import { getAttackModule } from './modules'
 import type {
   ActorAttackState,
+  AttackAnimationTiming,
   AttackModule,
   AttackSlotBinding,
   AttackTickResult,
@@ -8,6 +9,26 @@ import type {
 
 export function createAttackState(): ActorAttackState {
   return { cooldowns: {}, active: null }
+}
+
+export function attackAnimationDuration(animation: AttackAnimationTiming) {
+  return animation.frameCount * animation.frameSeconds
+}
+
+export function attackImpactTime(animation: AttackAnimationTiming) {
+  return animation.impactFrame * animation.frameSeconds
+}
+
+function isValidAnimation(
+  animation: AttackAnimationTiming | undefined,
+): animation is AttackAnimationTiming {
+  return Boolean(
+    animation &&
+      animation.frameCount > 0 &&
+      animation.frameSeconds > 0 &&
+      animation.impactFrame >= 0 &&
+      animation.impactFrame < animation.frameCount,
+  )
 }
 
 export function moduleForSlot(
@@ -27,13 +48,19 @@ export function tryActivateSlot(
   state: ActorAttackState,
   loadout: AttackSlotBinding[],
   slot: number,
+  animation: AttackAnimationTiming | undefined,
 ): AttackModule | null {
   if (state.active) return null
   const module = moduleForSlot(loadout, slot)
-  if (!module) return null
+  if (!module || !isValidAnimation(animation)) return null
   const remaining = state.cooldowns[module.id] ?? 0
   if (remaining > 0) return null
-  state.active = { moduleId: module.id, elapsed: 0, hitFired: false }
+  state.active = {
+    moduleId: module.id,
+    elapsed: 0,
+    hitFired: false,
+    animation: { ...animation },
+  }
   state.cooldowns[module.id] = module.cooldown
   return module
 }
@@ -69,13 +96,13 @@ export function tickAttack(state: ActorAttackState, delta: number): AttackTickRe
 
   state.active.elapsed += delta
   let hitJustFired = false
-  const hitTime = module.duration * module.hitAt
+  const hitTime = attackImpactTime(state.active.animation)
   if (!state.active.hitFired && state.active.elapsed >= hitTime) {
     state.active.hitFired = true
     hitJustFired = true
   }
 
-  if (state.active.elapsed >= module.duration) {
+  if (state.active.elapsed >= attackAnimationDuration(state.active.animation)) {
     state.active = null
     return {
       active: null,

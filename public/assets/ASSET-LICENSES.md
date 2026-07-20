@@ -56,6 +56,26 @@
 - Use: four-member player party idle/walk animations (paladin, ranger, wizard, assassin) and Bellkeeper NPC idle
 - Notes: 32×32 cells, four directional rows (down, left, right, up), 200ms idle/walk frames; assassin from True Heroes IV Ninja Assassin
 
+## Minifantasy Monster Creatures
+
+- Creator: Krishna Palacio
+- Source library: sibling `auto-battler/public/assets/minifantasy/`
+- Local files: `minifantasy/enemies/{gargoyle,gnoll,giant-rat}/`
+- License copy: `minifantasy/licenses/monster-creatures-v1.0/`
+- License: commercial use allowed inside a game project; modified or standalone assets may not be redistributed or resold
+- Use: passive combat encounter enemies with idle, walk, damage and death animations
+- Notes: 32×32 cells; directional idle/damage sheets and single-row death sheets
+
+## Minifantasy Crafting And Professions / UI Overhaul / Dungeon
+
+- Creator: Krishna Palacio
+- Source library: sibling `auto-battler/public/assets/minifantasy/`
+- Local files: `minifantasy/items/{red-potion,blue-potion,ruby,gold-nugget,gold-bar,heart,meat,pouch}.png`
+- License copies: `minifantasy/licenses/{crafting-and-professions-v1.0,ui-overhaul-v1.0,dungeon-v2.3}/`
+- License: commercial use allowed inside a game project; modified or standalone assets may not be redistributed or resold
+- Use: small enemy loot drops (potions, gems, gold, heart, meat, pouch)
+- Notes: 16×16 cropped cells from CraftingAndProfessions potion/mining sheets, UI GuiIcons, and Dungeon props
+
 ## Medieval: The Old Tower Inn
 
 - Creator: RandomMind

@@ -33,8 +33,18 @@
   import { clearWaterDisturbanceUnit, pushWaterDisturbance } from '../river/riverDisturbance'
   import {
     createAttackState,
+    attackAnimationDuration,
+    combatDelta,
+    consumeAbilitySlots,
+    emitCombatAudio,
+    findFocusTarget,
+    getCombatants,
+    getLivingEnemyColliders,
     LEADER_ATTACK_LOADOUT,
+    moduleForSlot,
     pushAttackSwing,
+    requestAbilitySlot,
+    setCombatFocusTarget,
     tickAttack,
     tickAttackSwings,
     tryActivateSlot,
@@ -53,6 +63,7 @@
     type Motion,
   } from './spriteSheet'
   import { createPseudo3DSprite, type Pseudo3DSprite } from './pseudo3dSprite'
+  import { attackAnimationFor } from './attackAnimations'
 
   type HeroDefinition = {
     id: string
@@ -157,6 +168,10 @@
   let publishAccumulator = 0
   let waterFxAccumulator = 0
   let waterIdleAccumulator = 0
+  let focusedEnemyId: string | null = null
+  let attackTargetId: string | null = null
+  const FOCUS_RELEASE_PADDING = 0.7
+  const FOCUS_LUNGE = 0.32
   /** How often we *try* to stamp; spacing in riverDisturbance does the real gating. */
   const WATER_FX_TRY_INTERVAL = 0.08
   const artVista = new URLSearchParams(window.location.search).get('art')
@@ -169,7 +184,7 @@
     leaderX + INITIAL_TRAIL_X * TRAIL_STEP * index,
     leaderZ + INITIAL_TRAIL_Z * TRAIL_STEP * index,
   ])
-  const artMode = Boolean(artVista)
+  const artMode = Boolean(artVista && artVista !== 'combat' && artVista !== 'trees')
 
   const { camera, canvas } = useThrelte()
 
@@ -354,18 +369,20 @@
       hasClickTarget = false
       playerLive.x = x
       playerLive.z = z
-      for (const slot of partyLive) {
-        slot.x = x
-        slot.z = z
+      for (let i = 0; i < partyLive.length; i += 1) {
+        const slot = partyLive[i]
+        const hero = heroes[i]
+        if (!slot || !hero) continue
+        slot.x = hero.x
+        slot.y = hero.footY
+        slot.z = hero.z
       }
       playerPosition.set([x, z])
       updateNearby(x, z)
       return
     }
     if (event.key === '1' && !get(activeDialogue)) {
-      if (tryActivateSlot(leaderCombat, leaderAttackLoadout, 1)) {
-        pulseCombat()
-      }
+      requestAbilitySlot(1)
       return
     }
     if (event.key === ' ') {
@@ -418,9 +435,73 @@
   })
 
   useTask((delta) => {
+    const eventDelta = delta
+    delta = combatDelta(delta)
     elapsed += delta
+    const combatants = getCombatants()
+    const activeTarget = attackTargetId
+      ? combatants.find((combatant) => combatant.id === attackTargetId && combatant.alive)
+      : undefined
+    if (attackTargetId && !activeTarget) attackTargetId = null
+
+    if (!leaderCombat.active) {
+      const module = moduleForSlot(leaderAttackLoadout, 1)
+      const nearby =
+        module?.delivery.kind === 'melee-arc'
+          ? findFocusTarget(
+              leaderX,
+              leaderZ,
+              'party',
+              combatants,
+              module.delivery.range + FOCUS_RELEASE_PADDING,
+              focusedEnemyId ?? undefined,
+            )
+          : undefined
+      focusedEnemyId = nearby?.id ?? null
+    }
+    setCombatFocusTarget(attackTargetId ?? focusedEnemyId)
+
+    if (!get(activeDialogue)) {
+      for (const slot of consumeAbilitySlots()) {
+        const boundModule = moduleForSlot(leaderAttackLoadout, slot)
+        const animation = boundModule
+          ? attackAnimationFor(definitions[0].id, boundModule.id)
+          : undefined
+        const activated = tryActivateSlot(
+          leaderCombat,
+          leaderAttackLoadout,
+          slot,
+          animation,
+        )
+        if (activated) {
+          const target =
+            activated.delivery.kind === 'melee-arc'
+              ? findFocusTarget(
+                  leaderX,
+                  leaderZ,
+                  'party',
+                  combatants,
+                  activated.delivery.range,
+                  focusedEnemyId ?? undefined,
+                )
+              : undefined
+          attackTargetId = target?.id ?? null
+          focusedEnemyId = attackTargetId ?? focusedEnemyId
+          setCombatFocusTarget(attackTargetId ?? focusedEnemyId)
+          if (target) {
+            heroes[0].lastFacing = facingForVelocity(
+              target.x - leaderX,
+              target.z - leaderZ,
+              heroes[0].lastFacing,
+            )
+          }
+          emitCombatAudio('swing')
+          pulseCombat()
+        }
+      }
+    }
     const attackTick = tickAttack(leaderCombat, delta)
-    tickAttackSwings(delta)
+    tickAttackSwings(eventDelta)
     if (attackTick.hitModule) {
       pushAttackSwing(
         definitions[0].id,
@@ -428,7 +509,7 @@
         leaderX,
         leaderZ,
         heroes[0].lastFacing,
-        attackTick.hitModule.range,
+        attackTargetId ?? undefined,
       )
     }
 
@@ -469,6 +550,7 @@
 
     const wantsToMove = Math.abs(moveX) + Math.abs(moveZ) > 0.01
     const wantsToRun = keys.has('shift')
+    const enemyColliders = getLivingEnemyColliders()
     let leaderMovedX = 0
     let leaderMovedZ = 0
 
@@ -483,7 +565,14 @@
       const stepZ = moveZ * speed * delta
       const previousX = leaderX
       const previousZ = leaderZ
-      const next = moveWithCollision(leaderX, leaderZ, stepX, stepZ, HERO_RADIUS)
+      const next = moveWithCollision(
+        leaderX,
+        leaderZ,
+        stepX,
+        stepZ,
+        HERO_RADIUS,
+        enemyColliders,
+      )
       leaderMovedX = next.x - leaderX
       leaderMovedZ = next.z - leaderZ
       leaderX = next.x
@@ -502,12 +591,38 @@
     const leaderMoving = Math.hypot(leaderMovedX, leaderMovedZ) > 0.001
     if (leaderMoving) recordTrail(leaderX, leaderZ)
 
-    const leaderFacing = facingForVelocity(leaderMovedX, leaderMovedZ, heroes[0].lastFacing)
+    const lockedTarget = attackTargetId
+      ? combatants.find((combatant) => combatant.id === attackTargetId && combatant.alive)
+      : undefined
+    const leaderFacing =
+      lockedTarget && (attackTick.active || attackTick.hitModule)
+        ? facingForVelocity(
+            lockedTarget.x - leaderX,
+            lockedTarget.z - leaderZ,
+            heroes[0].lastFacing,
+          )
+        : facingForVelocity(leaderMovedX, leaderMovedZ, heroes[0].lastFacing)
     heroes[0].lastFacing = leaderFacing
 
     heroes[0].x = leaderX
     heroes[0].z = leaderZ
     integrateJump(heroes[0], delta)
+    if (lockedTarget && leaderCombat.active && !$reducedMotion) {
+      const progress = Math.min(
+        1,
+        leaderCombat.active.elapsed /
+          Math.max(
+            0.001,
+            attackAnimationDuration(leaderCombat.active.animation),
+          ),
+      )
+      const distance = Math.hypot(lockedTarget.x - leaderX, lockedTarget.z - leaderZ) || 1
+      const lunge = Math.sin(progress * Math.PI) * FOCUS_LUNGE
+      heroes[0].sprite.root.position.x +=
+        ((lockedTarget.x - leaderX) / distance) * lunge
+      heroes[0].sprite.root.position.z +=
+        ((lockedTarget.z - leaderZ) / distance) * lunge
+    }
 
     const cam = camera.current
     waterFxAccumulator += delta
@@ -529,7 +644,12 @@
         const previousZ = hero.z
         const rawX = MathUtils.lerp(hero.x, trailPoint[0], follow)
         const rawZ = MathUtils.lerp(hero.z, trailPoint[1], follow)
-        const safe = resolveFreePosition(rawX, rawZ, HERO_RADIUS * 0.92)
+        const safe = resolveFreePosition(
+          rawX,
+          rawZ,
+          HERO_RADIUS * 0.92,
+          enemyColliders,
+        )
         movedX = safe.x - previousX
         movedZ = safe.z - previousZ
         hero.x = safe.x
@@ -558,6 +678,11 @@
           ? attackTick.active.motion
           : motionForMovement(heroMoving, wantsToRun && !onStairs)
       advanceMotion(hero, motion, delta)
+      if (index === 0 && attackTick.active && leaderCombat.active) {
+        // Render and gameplay sample the same authored timeline: when the
+        // controller fires impactFrame, the matching sprite frame is visible.
+        hero.motionElapsed = leaderCombat.active.elapsed
+      }
       const fording = overlapsRiver(hero.x, hero.z, HERO_RADIUS * 0.35)
       const climbBob =
         onStairs && heroMoving && !hero.airborne && !$reducedMotion
@@ -613,6 +738,7 @@
       const slot = partyLive[i]
       if (!slot) continue
       slot.x = heroes[i].x
+      slot.y = heroes[i].footY
       slot.z = heroes[i].z
     }
 
@@ -622,6 +748,7 @@
       playerPosition.set([leaderX, leaderZ])
       updateNearby(leaderX, leaderZ)
     }
+    if (!leaderCombat.active) attackTargetId = null
   })
 </script>
 

@@ -1,5 +1,6 @@
 import type { Unsubscriber } from 'svelte/store'
 import { audioEnabled, completedDiscoveries, weatherMode, type WeatherMode } from '../world/worldState'
+import { combatAudioEvent, type CombatAudioKind } from '../world/combat/runtime'
 
 type AudioNodes = {
   context: AudioContext
@@ -78,6 +79,58 @@ function chirp(context: AudioContext, output: AudioNode) {
   oscillator.stop(now + 0.24)
 }
 
+function combatCue(nodes: AudioNodes, kind: CombatAudioKind, hits: number) {
+  const context = nodes.context
+  if (context.state !== 'running') return
+  const now = context.currentTime
+  const oscillator = context.createOscillator()
+  const gain = context.createGain()
+  const pan = context.createStereoPanner()
+
+  if (kind === 'swing') {
+    oscillator.type = 'sawtooth'
+    oscillator.frequency.setValueAtTime(240, now)
+    oscillator.frequency.exponentialRampToValueAtTime(82, now + 0.13)
+    gain.gain.setValueAtTime(0.0001, now)
+    gain.gain.exponentialRampToValueAtTime(0.018, now + 0.012)
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.15)
+  } else {
+    oscillator.type = kind === 'defeat' ? 'square' : 'triangle'
+    oscillator.frequency.setValueAtTime(kind === 'defeat' ? 118 : 165, now)
+    oscillator.frequency.exponentialRampToValueAtTime(
+      kind === 'defeat' ? 42 : 68,
+      now + (kind === 'defeat' ? 0.3 : 0.14),
+    )
+    gain.gain.setValueAtTime(0.0001, now)
+    gain.gain.exponentialRampToValueAtTime(
+      Math.min(0.055, 0.025 + hits * 0.007),
+      now + 0.008,
+    )
+    gain.gain.exponentialRampToValueAtTime(
+      0.0001,
+      now + (kind === 'defeat' ? 0.34 : 0.17),
+    )
+
+    const noise = context.createBufferSource()
+    const noiseGain = context.createGain()
+    const filter = context.createBiquadFilter()
+    noise.buffer = whiteNoiseBuffer(context, 0.16)
+    filter.type = 'bandpass'
+    filter.frequency.value = kind === 'defeat' ? 280 : 720
+    filter.Q.value = 0.7
+    noiseGain.gain.setValueAtTime(Math.min(0.04, 0.014 + hits * 0.005), now)
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14)
+    noise.connect(filter).connect(noiseGain).connect(nodes.master)
+    noise.start(now)
+    noise.stop(now + 0.16)
+  }
+
+  pan.pan.value = (Math.random() - 0.5) * 0.32
+  oscillator.connect(gain).connect(pan).connect(nodes.master)
+  oscillator.start(now)
+  oscillator.stop(now + (kind === 'defeat' ? 0.36 : 0.18))
+}
+
 function createNodes() {
   const context = new AudioContext()
   const master = context.createGain()
@@ -139,7 +192,9 @@ export function createAudioDirector() {
   let unsubscribeAudio: Unsubscriber | undefined
   let unsubscribeDiscoveries: Unsubscriber | undefined
   let unsubscribeWeather: Unsubscriber | undefined
+  let unsubscribeCombat: Unsubscriber | undefined
   let currentWeather: WeatherMode = 'sunshower'
+  let lastCombatAudioSerial = 0
 
   unsubscribeAudio = audioEnabled.subscribe(async (enabled) => {
     if (enabled && !nodes) {
@@ -182,10 +237,17 @@ export function createAudioDirector() {
     applyWeatherAmbience(nodes, weather, nodes.context.currentTime)
   })
 
+  unsubscribeCombat = combatAudioEvent.subscribe((event) => {
+    if (event.serial === 0 || event.serial === lastCombatAudioSerial) return
+    lastCombatAudioSerial = event.serial
+    if (nodes) combatCue(nodes, event.kind, event.hits)
+  })
+
   return () => {
     unsubscribeAudio?.()
     unsubscribeDiscoveries?.()
     unsubscribeWeather?.()
+    unsubscribeCombat?.()
     if (!nodes) return
     clearInterval(nodes.birdTimer)
     nodes.wind.stop()

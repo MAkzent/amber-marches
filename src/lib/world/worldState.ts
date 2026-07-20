@@ -1,5 +1,6 @@
 import { derived, get, writable } from 'svelte/store'
-import { walkHeight } from './data/sunmereVale'
+import { clearAttackSwings, resetCombatRuntime } from './combat'
+import { scenery, walkHeight } from './data/sunmereVale'
 import { riverCenter } from './data/silverrunChannel'
 
 export type DiscoveryId = 'sunfruit' | 'shrine' | 'bridge' | 'villager' | 'watchtower' | 'ascent'
@@ -120,6 +121,13 @@ export const discoveries: Discovery[] = [
   },
 ]
 
+const treeOcclusionAnchor = scenery
+  .filter((point) => point.kind === 'oak' || point.kind === 'pine')
+  .sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z))[0]
+const treeOcclusionStart: [number, number] = treeOcclusionAnchor
+  ? [treeOcclusionAnchor.x - 1.32, treeOcclusionAnchor.z - 1.64]
+  : [1, 20]
+
 const artStartLocations: Record<string, [number, number]> = {
   village: [-7, 9],
   bridge: [6, riverCenter(6)],
@@ -127,24 +135,28 @@ const artStartLocations: Record<string, [number, number]> = {
   shrine: [-17.1, -16],
   watchtower: [18.8, -22],
   ascent: [-11.2, -17.0],
+  combat: [8.9, 19.9],
+  trees: treeOcclusionStart,
 }
 const artStart =
   typeof window === 'undefined'
     ? null
     : artStartLocations[new URLSearchParams(window.location.search).get('art') ?? '']
+const liveStart = artStart ?? ([1, 20] as [number, number])
+const liveStartY = walkHeight(liveStart[0], liveStart[1])
 
-export const playerPosition = writable<[number, number]>(artStart ?? [1, 20])
+export const playerPosition = writable<[number, number]>(liveStart)
 /** Per-frame world position for camera/weather — avoid Svelte store churn every tick. */
 export const playerLive = {
-  x: (artStart ?? [1, 20])[0],
-  z: (artStart ?? [1, 20])[1],
+  x: liveStart[0],
+  z: liveStart[1],
 }
-/** Per-frame party feet for grass trample / local FX (leader + followers). */
-export const partyLive: Array<{ x: number; z: number }> = [
-  { x: (artStart ?? [1, 20])[0], z: (artStart ?? [1, 20])[1] },
-  { x: (artStart ?? [1, 20])[0], z: (artStart ?? [1, 20])[1] },
-  { x: (artStart ?? [1, 20])[0], z: (artStart ?? [1, 20])[1] },
-  { x: (artStart ?? [1, 20])[0], z: (artStart ?? [1, 20])[1] },
+/** Per-frame party feet; only slot 0 drives controlled-character tree occlusion. */
+export const partyLive: Array<{ x: number; y: number; z: number }> = [
+  { x: liveStart[0], y: liveStartY, z: liveStart[1] },
+  { x: liveStart[0], y: liveStartY, z: liveStart[1] },
+  { x: liveStart[0], y: liveStartY, z: liveStart[1] },
+  { x: liveStart[0], y: liveStartY, z: liveStart[1] },
 ]
 /** Camera-relative binary axes from the floating touch joystick (−1 / 0 / 1). */
 export const touchMove = {
@@ -346,6 +358,8 @@ export function completeNearby() {
 }
 
 export function resetWorld() {
+  clearAttackSwings()
+  resetCombatRuntime()
   completedDiscoveries.set(new Set())
   nearbyDiscovery.set(null)
   activeToast.set(null)
@@ -359,6 +373,7 @@ export function resetWorld() {
   playerLive.z = 20
   for (const slot of partyLive) {
     slot.x = 1
+    slot.y = walkHeight(1, 20)
     slot.z = 20
   }
   playerPosition.set([1, 20])
