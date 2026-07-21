@@ -38,7 +38,7 @@
   const COMBAT_TILT_FOCUS = 1
   const COMBAT_TILT_FEATHER = 0
 
-  class SunmereHd2dEffect extends Effect {
+  class AmberMarchesHd2dEffect extends Effect {
     private readonly pixelGrid: Uniform<Vector4>
     private readonly pixelSize: Uniform<number>
 
@@ -47,7 +47,7 @@
       const pixelSize = new Uniform(CSS_PIXEL_SIZE)
 
       super(
-        'SunmereHd2dGrade',
+        'AmberMarchesHd2dGrade',
         `
           uniform float pixelSize;
           uniform vec4 pixelGrid;
@@ -165,7 +165,7 @@
         kernelSize: KernelSize.VERY_SMALL,
         resolutionScale: 0.55,
       })
-  const hd2dGrade = new SunmereHd2dEffect()
+  const hd2dGrade = new AmberMarchesHd2dEffect()
   const vignette = new VignetteEffect({
     darkness: 0.26,
     offset: 0.32,

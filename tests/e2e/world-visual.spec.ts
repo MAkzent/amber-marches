@@ -6,11 +6,11 @@ test('opening vista renders and the first discovery is playable', async ({ page 
 
   await page.goto('/')
   await expect(page.getByTestId('world-canvas')).toBeVisible()
-  await expect(page.getByRole('heading', { name: /Sunmere Vale/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Amber Marches/i })).toBeVisible()
   await page.waitForTimeout(2500)
   await page.screenshot({ path: 'test-results/opening-vista.png' })
 
-  await page.getByRole('button', { name: /Enter the vale/i }).click()
+  await page.getByRole('button', { name: /Enter the marches/i }).click()
   const speakButton = page.getByRole('button', { name: /Speak The Bellkeeper/i })
   // Move in short steps so the test stops inside the interaction radius instead
   // of relying on frame-rate-dependent travel distance.
@@ -32,7 +32,7 @@ test('opening vista renders and the first discovery is playable', async ({ page 
   await page.keyboard.press('e')
   await page.keyboard.press('e')
   await page.keyboard.press('e')
-  await expect(page.getByLabel('Quest tracker')).toContainText(/Defend Sunmere/i)
+  await expect(page.getByLabel('Quest tracker')).toContainText(/Defend Amber Marches/i)
   await expect(page.getByLabel('Quest tracker')).toContainText(/defeat the pack to the north/i)
 
   expect(pageErrors).toEqual([])
@@ -44,7 +44,7 @@ test('hex battle enters formation, starts, and returns to explore', async ({ pag
   page.on('pageerror', (error) => pageErrors.push(error.message))
 
   await page.goto('/?art=combat')
-  await page.getByRole('button', { name: /Enter the vale/i }).click()
+  await page.getByRole('button', { name: /Enter the marches/i }).click()
   // Horde waits on the north bank (−Z) — cross the bridge from the south approach.
   await page.keyboard.down('Shift')
   await page.keyboard.down('w')
@@ -73,7 +73,7 @@ test('the HUD remains legible in a narrow viewport', async ({ page }) => {
   await page.setViewportSize({ width: 430, height: 760 })
   await page.goto('/')
   await page.waitForTimeout(1800)
-  await expect(page.getByRole('button', { name: /Enter the vale/i })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Enter the marches/i })).toBeVisible()
   await page.screenshot({ path: 'test-results/narrow-vista.png' })
 })
 
@@ -82,7 +82,7 @@ test('obstructing trees fade for the controlled character across camera framings
   page.on('pageerror', (error) => pageErrors.push(error.message))
 
   await page.goto('/?art=trees')
-  await page.getByRole('button', { name: /Enter the vale/i }).click()
+  await page.getByRole('button', { name: /Enter the marches/i }).click()
   await page.waitForTimeout(1200)
   await page.screenshot({ path: 'test-results/tree-occlusion.png' })
 
@@ -99,7 +99,7 @@ test('obstructing trees fade for the controlled character across camera framings
 
   await page.setViewportSize({ width: 430, height: 760 })
   await page.goto('/?art=trees')
-  await page.getByRole('button', { name: /Enter the vale/i }).click()
+  await page.getByRole('button', { name: /Enter the marches/i }).click()
   await page.waitForTimeout(900)
   await page.screenshot({ path: 'test-results/tree-occlusion-narrow.png' })
 
@@ -110,7 +110,7 @@ test('mobile combat exposes Start Battle during formation', async ({ page }) => 
   test.setTimeout(60_000)
   await page.setViewportSize({ width: 430, height: 760 })
   await page.goto('/?art=combat')
-  await page.getByRole('button', { name: /Enter the vale/i }).click()
+  await page.getByRole('button', { name: /Enter the marches/i }).click()
   await page.keyboard.down('Shift')
   await page.keyboard.down('w')
   await expect(page.getByTestId('start-battle')).toBeVisible({ timeout: 40_000 })
@@ -126,7 +126,7 @@ test('the Silverrun bridge and shallow ford remain playable', async ({ page }) =
   page.on('pageerror', (error) => pageErrors.push(error.message))
 
   await page.goto('/?art=bridge')
-  await page.getByRole('button', { name: /Enter the vale/i }).click()
+  await page.getByRole('button', { name: /Enter the marches/i }).click()
   await expect(page.getByRole('button', { name: /Take in the view/i })).toBeVisible()
   await page.waitForTimeout(900)
   await page.screenshot({ path: 'test-results/silverrun-bridge.png' })
@@ -141,7 +141,7 @@ test('the Silverrun bridge and shallow ford remain playable', async ({ page }) =
 
   // The dedicated art start exercises wading and its disturbance effects.
   await page.goto('/?art=ford')
-  await page.getByRole('button', { name: /Enter the vale/i }).click()
+  await page.getByRole('button', { name: /Enter the marches/i }).click()
   await page.keyboard.down('a')
   await page.waitForTimeout(600)
   await page.keyboard.up('a')
@@ -163,7 +163,7 @@ test('mobile graphics tier reports live FPS after entering the vale', async ({ b
   const coarse = await page.evaluate(() => window.matchMedia('(pointer: coarse)').matches)
   expect(coarse).toBe(true)
 
-  await page.getByRole('button', { name: /Enter the vale/i }).click()
+  await page.getByRole('button', { name: /Enter the marches/i }).click()
   await expect(page.getByTestId('perf-panel')).toBeVisible({ timeout: 5000 })
   // Wait for perfStats publish window (~0.28s) plus a few composer frames.
   await page.waitForTimeout(1200)
@@ -223,7 +223,7 @@ test('mobile rotation preserves the canvas and framebuffer proportions', async (
 
 test('watchtower banner raises evening light over the vale', async ({ page }) => {
   await page.goto('/?art=watchtower')
-  await page.getByRole('button', { name: /Enter the vale/i }).click()
+  await page.getByRole('button', { name: /Enter the marches/i }).click()
   await page.waitForTimeout(1700)
   await expect(page.getByRole('button', { name: /Raise the banner Larkspur Watch/i })).toBeVisible()
   await page.keyboard.press('e')
@@ -237,7 +237,7 @@ test('procedural ascent and mountain summit render without asset failures', asyn
   page.on('pageerror', (error) => pageErrors.push(error.message))
 
   await page.goto('/?art=ascent')
-  await page.getByRole('button', { name: /Enter the vale/i }).click()
+  await page.getByRole('button', { name: /Enter the marches/i }).click()
   await page.waitForTimeout(1800)
 
   await expect(page.getByTestId('world-canvas')).toBeVisible()

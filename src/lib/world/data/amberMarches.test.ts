@@ -31,10 +31,10 @@ import {
   sceneryColliderRadius,
   terrainHeight,
   walkHeight,
-} from './sunmereVale'
+} from './amberMarches'
 import { spanAbutments, spanDeckHeight } from '../build/crossings'
 
-describe('Sunmere Vale scene data', () => {
+describe('Amber Marches scene data', () => {
   it('keeps deterministic scenery within the authored world', () => {
     const trees = scenery.filter((p) => p.kind === 'oak' || p.kind === 'pine')
     expect(trees.length).toBeGreaterThan(40)

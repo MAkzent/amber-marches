@@ -27,7 +27,7 @@
   } from '../combat'
   import type { EnemyDefinition } from '../combat/encounter'
   import { LOOT_DROP_AFTER_DEATH, spawnLootBurst } from '../loot/runtime'
-  import { walkHeight } from '../data/sunmereVale'
+  import { walkHeight } from '../data/amberMarches'
   import { dusk, playerLive, pulseCombat, reducedMotion } from '../worldState'
   import {
     isBattleActive,

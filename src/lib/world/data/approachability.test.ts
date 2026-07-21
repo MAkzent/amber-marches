@@ -8,7 +8,7 @@ import {
   landmarkColliderRadius,
   landmarkFootRadius,
   landmarks,
-} from './sunmereVale'
+} from './amberMarches'
 
 /** True when the hero disc can stand somewhere inside the discovery ring. */
 function discoveryHasFreeStand(x: number, z: number, radius: number) {

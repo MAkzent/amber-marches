@@ -27,7 +27,7 @@ import {
 describe('demo quest', () => {
   beforeEach(resetWorld)
 
-  it('starts at speak with the Defend Sunmere objective', () => {
+  it('starts at speak with the Defend Amber Marches objective', () => {
     expect(get(questPhase)).toBe('speak')
     expect(get(objective)).toMatch(/Speak with Mara/i)
     expect(get(questSteps).map((step) => step.id)).toEqual(['speak', 'hunt', 'return'])

@@ -7,7 +7,7 @@ import {
   scenery,
   sceneryColliderRadius,
   type SceneryPoint,
-} from './data/sunmereVale'
+} from './data/amberMarches'
 import { SILVERRUN_SHALLOW_WATER01 } from './data/silverrunChannel'
 
 export const HERO_RADIUS = 0.65

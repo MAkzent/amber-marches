@@ -1,7 +1,7 @@
 <script lang="ts">
   import { T } from '@threlte/core'
   import { completedDiscoveries, discoveries } from '../worldState'
-  import { walkHeight } from '../data/sunmereVale'
+  import { walkHeight } from '../data/amberMarches'
 
   const tower = discoveries.find((discovery) => discovery.id === 'watchtower')
 </script>

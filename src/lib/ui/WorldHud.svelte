@@ -100,11 +100,11 @@
           <span class="eyebrow">Prologue</span>
           <span>A new road begins</span>
         </div>
-        <h1><span>Sunmere</span><em>Vale</em></h1>
+        <h1><span>Amber</span><em>Marches</em></h1>
         <p>A quiet borderland where old promises still glow beneath the grass.</p>
         <div class="intro-actions">
           <button class="intro-enter" onclick={begin}>
-            <strong>Enter the vale</strong>
+            <strong>Enter the marches</strong>
             <span class="button-arrow" aria-hidden="true">→</span>
           </button>
           {#if fullscreenSupported}
@@ -129,10 +129,10 @@
     <BattleHud />
     <header class="topbar" transition:fade={{ duration: 500 }}>
       <div class="region-mark" aria-label="Current region">
-        <span class="sigil" aria-hidden="true">SV</span>
+        <span class="sigil" aria-hidden="true">AM</span>
         <div>
-          <span class="eyebrow">The Amber Marches</span>
-          <strong>Sunmere Vale</strong>
+          <span class="eyebrow">The Borderlands</span>
+          <strong>Amber Marches</strong>
         </div>
       </div>
 
@@ -165,7 +165,7 @@
           <span class="quest-icon" aria-hidden="true">!</span>
           <div>
             <span class="eyebrow">Quest</span>
-            <strong>Defend Sunmere</strong>
+            <strong>Defend Amber Marches</strong>
           </div>
         </div>
         <p class="quest-objective">{$objective}</p>

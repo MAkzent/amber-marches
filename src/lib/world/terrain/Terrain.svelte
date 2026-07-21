@@ -15,7 +15,7 @@
     terrainHeight,
     WHISPERING_ASCENT,
     walkHeight,
-  } from '../data/sunmereVale'
+  } from '../data/amberMarches'
   import { createRoadGeometry, createTerrainGeometry } from './geometry'
   import WorldModel from '../environment/WorldModel.svelte'
   import AscentStructure from '../environment/AscentStructure.svelte'

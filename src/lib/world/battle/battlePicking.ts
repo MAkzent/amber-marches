@@ -6,7 +6,7 @@ import {
   type Hex,
 } from '../../battle'
 import { intersectHeightfield } from '../data/heightfieldPick'
-import { walkHeight } from '../data/sunmereVale'
+import { walkHeight } from '../data/amberMarches'
 
 export type BattleHexHit = {
   hex: Hex

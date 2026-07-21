@@ -12,7 +12,7 @@
     SRGBColorSpace,
     TextureLoader,
   } from 'three'
-  import { walkHeight } from '../data/sunmereVale'
+  import { walkHeight } from '../data/amberMarches'
   import { activeDialogue, dusk, priestInteractable, questPhase, reducedMotion } from '../worldState'
   import {
     FRAME_HEIGHT,

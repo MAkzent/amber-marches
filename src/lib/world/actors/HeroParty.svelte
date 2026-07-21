@@ -32,7 +32,7 @@
     isPartyReturning,
     notifyPartyReturnComplete,
   } from '../battle'
-  import { walkHeight, onAscentLane, riverCenter, WATER_SURFACE_Y } from '../data/sunmereVale'
+  import { walkHeight, onAscentLane, riverCenter, WATER_SURFACE_Y } from '../data/amberMarches'
   import { intersectHeightfield } from '../data/heightfieldPick'
   import { HERO_RADIUS, moveWithCollision, overlapsRiver, resolveFreePosition } from '../collision'
   import { clearWaterDisturbanceUnit, pushWaterDisturbance } from '../river/riverDisturbance'

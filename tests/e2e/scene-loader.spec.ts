@@ -24,5 +24,5 @@ test('keeps the loading screen up until scene assets finish', async ({ page }) =
 
   releaseGrass()
   await expect(loader).toHaveCount(0, { timeout: 15_000 })
-  await expect(page.getByRole('heading', { name: /Sunmere Vale/i })).toBeVisible()
+  await expect(page.getByRole('heading', { name: /Amber Marches/i })).toBeVisible()
 })

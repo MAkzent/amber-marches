@@ -11,8 +11,8 @@
     BufferGeometry,
     Float32BufferAttribute,
   } from 'three'
-  import { scenery } from '../data/sunmereVale'
-  import { terrainHeight } from '../data/sunmereVale'
+  import { scenery } from '../data/amberMarches'
+  import { terrainHeight } from '../data/amberMarches'
   import { WIND, getWindTime, windEnvelope } from '../atmosphere/wind'
   import { gbaToonGradient } from '../render/retroPalette'
   import { reducedMotion, weatherMode } from '../worldState'

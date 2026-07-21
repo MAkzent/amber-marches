@@ -11,7 +11,7 @@ import {
   onAscentTreads,
   projectOntoAscent,
 } from './mysteriousStairs'
-import { isWalkable, terrainHeight, walkHeight } from './sunmereVale'
+import { isWalkable, terrainHeight, walkHeight } from './amberMarches'
 
 describe('Whispering Ascent', () => {
   it('projects centerline points with along rising from base to top', () => {

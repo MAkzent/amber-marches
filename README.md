@@ -1,10 +1,10 @@
 # Amber Marches
 
-![Sunmere Vale opening vista](docs/sunmere-vale.png)
+![Amber Marches opening vista](docs/amber-marches.png)
 
 An original 2.5D exploration vertical slice built with Svelte 5, Threlte and Three.js. Inspired by [Unicorn Overlords](https://unicornoverlord.atlus.com/index.html?lang=en) — this is a separate project that borrows the spirit of cinematic fantasy tactics and borderland adventure, not an official or affiliated title.
 
-The first chronicle is **Sunmere Vale**: an authored low-poly valley with a four-hero Minifantasy party, five persistent discoveries, a fixed cinematic camera, contextual UI and an opt-in soundscape.
+**Amber Marches** is an authored low-poly borderland with a four-hero Minifantasy party, five persistent discoveries, a fixed cinematic camera, contextual UI and an opt-in soundscape.
 
 **Demo:** [amber-marches.fly.dev](https://amber-marches.fly.dev/)
 

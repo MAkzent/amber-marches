@@ -1,6 +1,6 @@
 <script lang="ts">
   import { T } from '@threlte/core'
-  import { bridgeApproachLanterns, walkHeight } from '../data/sunmereVale'
+  import { bridgeApproachLanterns, walkHeight } from '../data/amberMarches'
   import { gbaToonGradient } from '../render/retroPalette'
 </script>
 

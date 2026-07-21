@@ -13,7 +13,7 @@
     TextureLoader,
     type Texture,
   } from 'three'
-  import { walkHeight } from '../data/sunmereVale'
+  import { walkHeight } from '../data/amberMarches'
   import { combatImpact } from '../combat'
   import { partyLive, playerLive, reducedMotion } from '../worldState'
   import { isLootCollectable } from '../battle'

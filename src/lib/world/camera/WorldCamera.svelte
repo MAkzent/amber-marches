@@ -12,7 +12,7 @@
     reducedMotion,
     tickCombatLive,
   } from '../worldState'
-  import { walkHeight } from '../data/sunmereVale'
+  import { walkHeight } from '../data/amberMarches'
   import { combatImpact } from '../combat'
   import { converseTuning } from './converseTuning'
   import { battleTuning } from './battleTuning'

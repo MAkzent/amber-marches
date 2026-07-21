@@ -14,16 +14,16 @@ import {
   reducedMotion,
 } from '../worldState'
 import { spawnLootBurst } from '../loot/runtime'
-import { walkHeight } from '../data/sunmereVale'
+import { walkHeight } from '../data/amberMarches'
 import { clearCombatHudVitals, combatImpact } from '../combat'
 import { PASSIVE_ENEMIES } from '../combat/encounter'
 import { computeBlockedHexes } from './boardTerrain'
-import { SUNMERE_BATTLE_MAP } from './encounterMap'
+import { AMBER_MARCHES_BATTLE_MAP } from './encounterMap'
 import { placementHighlight } from './placementHighlight'
 
 /** Authored pack centroid — north forest past Silverrun (−Z; matches PASSIVE_ENEMIES). */
-export const ENCOUNTER_ORIGIN = SUNMERE_BATTLE_MAP.origin
-export const ENCOUNTER_TRIGGER_RADIUS = SUNMERE_BATTLE_MAP.triggerRadius
+export const ENCOUNTER_ORIGIN = AMBER_MARCHES_BATTLE_MAP.origin
+export const ENCOUNTER_TRIGGER_RADIUS = AMBER_MARCHES_BATTLE_MAP.triggerRadius
 
 /** Natural standing Y; elevation never changes tactical rules or board shape. */
 export function battleGroundY(x: number, z: number): number {
@@ -404,20 +404,20 @@ export function enterBattle() {
   exiting = false
   exitElapsed = 0
   introVisible.set(false)
-  const origin = { ...SUNMERE_BATTLE_MAP.origin }
+  const origin = { ...AMBER_MARCHES_BATTLE_MAP.origin }
   const blocked = computeBlockedHexes(
     origin,
-    SUNMERE_BATTLE_MAP.radius,
-    SUNMERE_BATTLE_MAP.hexSize,
+    AMBER_MARCHES_BATTLE_MAP.radius,
+    AMBER_MARCHES_BATTLE_MAP.hexSize,
   )
   hexBattleDriver.buildEncounter({
     origin,
     seed: 17,
-    boardRadius: SUNMERE_BATTLE_MAP.radius,
-    hexSize: SUNMERE_BATTLE_MAP.hexSize,
+    boardRadius: AMBER_MARCHES_BATTLE_MAP.radius,
+    hexSize: AMBER_MARCHES_BATTLE_MAP.hexSize,
     blocked,
-    heroDeploy: SUNMERE_BATTLE_MAP.heroDeploy,
-    enemyDeploy: SUNMERE_BATTLE_MAP.enemyDeploy,
+    heroDeploy: AMBER_MARCHES_BATTLE_MAP.heroDeploy,
+    enemyDeploy: AMBER_MARCHES_BATTLE_MAP.enemyDeploy,
   })
   if (get(reducedMotion)) {
     preludeActive = false

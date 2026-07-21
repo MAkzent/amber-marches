@@ -17,7 +17,7 @@ import {
   type BoardOrigin,
   type Hex,
 } from '../../battle'
-import { walkHeight } from '../data/sunmereVale'
+import { walkHeight } from '../data/amberMarches'
 
 /** Atlas codes — stored as raw bytes, sampled as r*255 in the shader. */
 export const CELL_KIND = {

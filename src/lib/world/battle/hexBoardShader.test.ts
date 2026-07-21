@@ -6,7 +6,7 @@ import {
   createTerrainHexPatchGeometry,
   packCellKindData,
 } from './hexBoardShader'
-import { walkHeight } from '../data/sunmereVale'
+import { walkHeight } from '../data/amberMarches'
 
 describe('hex board cell atlas', () => {
   const radius = 2

@@ -6,7 +6,7 @@ import {
   PlaneGeometry,
   Vector3,
 } from 'three'
-import { sampleRiver, terrainHeight, walkHeight } from '../data/sunmereVale'
+import { sampleRiver, terrainHeight, walkHeight } from '../data/amberMarches'
 
 const grassLow = new Color('#4d6037')
 const grassHigh = new Color('#98964c')

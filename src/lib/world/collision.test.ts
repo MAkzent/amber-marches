@@ -25,7 +25,7 @@ import {
   sampleRiverAxis,
   terrainHeight,
   walkHeight,
-} from './data/sunmereVale'
+} from './data/amberMarches'
 
 describe('hero collision', () => {
   it('includes landmark and scenery colliders', () => {

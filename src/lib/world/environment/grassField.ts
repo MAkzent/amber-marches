@@ -1,5 +1,5 @@
 /**
- * Low-cut meadow grass for Sunmere Vale — Kenney Nature Kit CC0 tufts
+ * Low-cut meadow grass for Amber Marches — Kenney Nature Kit CC0 tufts
  * (`grass.glb` ~0.25m, `grass_leafs.glb` ~0.14m) as InstancedMeshes.
  *
  * Placement grows up to landmark walls (only the solid footprint is cleared).
@@ -29,7 +29,7 @@ import {
   scenery,
   walkHeight,
   WORLD_BOUNDS,
-} from '../data/sunmereVale'
+} from '../data/amberMarches'
 import { gbaToonGradient } from '../render/retroPalette'
 
 export const MAX_BENDERS = 12
@@ -373,7 +373,7 @@ export function createKenneyGrassField(
   const leafGeo = prepareGeometry(leafGeometry)
 
   const root = new Group()
-  root.name = 'sunmere-kenney-grass'
+  root.name = 'amber-marches-kenney-grass'
   const meshes: InstancedMesh[] = []
   const materials: Material[] = [grassMat, leafMat]
 

@@ -1,7 +1,7 @@
 /**
  * Bridge / water / road crossing contracts.
  *
- * Authored props still live in sunmereVale, but every span answers:
+ * Authored props still live in amberMarches, but every span answers:
  * - where abutments are (road snap targets)
  * - where the walk deck is (walkHeight / FX gates)
  * - where open water must stay visible (road mesh gaps)

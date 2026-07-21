@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { SILVERRUN_SPAN, spanDeckHeight } from '../build/crossings'
 import { intersectHeightfield } from './heightfieldPick'
-import { SILVERRUN_BRIDGE, terrainHeight, walkHeight } from './sunmereVale'
+import { SILVERRUN_BRIDGE, terrainHeight, walkHeight } from './amberMarches'
 
 describe('heightfield pick (camera ray vs walk surface)', () => {
   it('hits the walk surface under a pitched isometric-style camera ray', () => {

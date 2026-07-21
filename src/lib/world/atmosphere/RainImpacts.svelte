@@ -10,7 +10,7 @@
   } from 'three'
   import { get } from 'svelte/store'
   import { sampleRiver, WATER_SURFACE_Y } from '../data/silverrunChannel'
-  import { walkHeight } from '../data/sunmereVale'
+  import { walkHeight } from '../data/amberMarches'
   import {
     graphicsTier,
     playerLive,

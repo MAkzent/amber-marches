@@ -49,7 +49,8 @@
     class:is-leaving={leaving}
     data-testid="scene-loader"
     role="status"
-    aria-label="Loading Sunmere Vale"
+    aria-label="Loading Amber Marches"
+
     aria-live="polite"
   >
     <div class="sky-glow" aria-hidden="true"></div>
@@ -62,13 +63,13 @@
     <div class="screen-texture" aria-hidden="true"></div>
 
     <div class="loader-lockup">
-      <span class="chapter">The Amber Marches</span>
+      <span class="chapter">Prologue</span>
       <div class="crest" aria-hidden="true">
         <span></span>
       </div>
       <div class="title" aria-hidden="true">
-        <span>Sunmere</span>
-        <em>Vale</em>
+        <span>Amber</span>
+        <em>Marches</em>
       </div>
 
       <div class="loading-copy">

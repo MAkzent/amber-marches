@@ -6,7 +6,7 @@ import {
   hexToWorldXZ,
 } from '../../battle'
 import { ENCOUNTER_ORIGIN } from '../battle/battleBridge'
-import { walkHeight } from '../data/sunmereVale'
+import { walkHeight } from '../data/amberMarches'
 import { BATTLE_TUNING_DEFAULTS } from './battleTuning'
 import {
   boardExtentsXZ,

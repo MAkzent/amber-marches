@@ -6,7 +6,7 @@ import {
   GRASS_STEP_MOBILE,
   sampleGrassTufts,
 } from './grassField'
-import { collisionCircles, onBridgeDeck, sampleRiver } from '../data/sunmereVale'
+import { collisionCircles, onBridgeDeck, sampleRiver } from '../data/amberMarches'
 
 describe('blocksGrass', () => {
   it('clears only solid building footprints so yards can grow lawn', () => {

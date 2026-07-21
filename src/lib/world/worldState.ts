@@ -1,6 +1,6 @@
 import { derived, get, writable } from 'svelte/store'
 import { clearAttackSwings, resetCombatRuntime } from './combat'
-import { scenery, walkHeight } from './data/sunmereVale'
+import { scenery, walkHeight } from './data/amberMarches'
 import { riverCenter } from './data/silverrunChannel'
 
 export type DiscoveryId = 'villager' | 'watchtower'
@@ -59,7 +59,7 @@ export const dialogueAnchor = {
 const PRIEST_INTRO_DIALOGUE: DialogueLine[] = [
   {
     speaker: 'Mara the Bellkeeper',
-    text: 'Hold a moment, travelers. Something stalks the woods north of the Silverrun — and Sunmere will not sleep while it grows bold.',
+    text: 'Hold a moment, travelers. Something stalks the woods north of the Silverrun — and the Marches will not sleep while it grows bold.',
   },
   {
     speaker: 'Mara the Bellkeeper',
@@ -74,7 +74,7 @@ const PRIEST_INTRO_DIALOGUE: DialogueLine[] = [
 const PRIEST_REWARD_DIALOGUE: DialogueLine[] = [
   {
     speaker: 'Mara the Bellkeeper',
-    text: 'You return with the quiet of the woods behind you. Sunmere owes you its thanks.',
+    text: 'You return with the quiet of the woods behind you. The Marches owe you their thanks.',
   },
   {
     speaker: 'Mara the Bellkeeper',
@@ -90,7 +90,7 @@ const PRIEST_RECOGNITION_DIALOGUE: DialogueLine[] = [
   },
   {
     speaker: 'Mara the Bellkeeper',
-    text: 'Sunmere is safer for your steel. Take this blessing — small, but sincere. The vale remembers those who stand for it.',
+    text: 'The Marches are safer for your steel. Take this blessing — small, but sincere. The vale remembers those who stand for it.',
   },
 ]
 
@@ -99,7 +99,7 @@ export const discoveries: Discovery[] = [
     id: 'villager',
     eyebrow: 'A voice on the road',
     title: 'The Bellkeeper',
-    description: 'Mara asks you to protect Sunmere from the threat beyond the river.',
+    description: 'Mara asks you to protect Amber Marches from the threat beyond the river.',
     position: [-7, 9],
     radius: 3.4,
     action: 'Speak',
