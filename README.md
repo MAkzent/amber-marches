@@ -4,6 +4,8 @@ An original 2.5D exploration vertical slice built with Svelte 5, Threlte and Thr
 
 The first chronicle is **Sunmere Vale**: an authored low-poly valley with a four-hero Minifantasy party, five persistent discoveries, a fixed cinematic camera, contextual UI and an opt-in soundscape.
 
+**Demo:** [amber-marches.fly.dev](https://amber-marches.fly.dev/)
+
 ## Run
 
 ```sh
