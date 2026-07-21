@@ -47,6 +47,7 @@ export {
   combatDelta,
   combatAudioEvent,
   combatFocus,
+  clearCombatHudVitals,
   combatHud,
   combatImpact,
   consumeAbilitySlots,

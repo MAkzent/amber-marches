@@ -17,12 +17,17 @@ export type EnemyDefinition = {
   }
 }
 
+/**
+ * Horde waits in the woods on Silverrun's north bank (−Z) — players must
+ * cross the bridge from the village (south / +Z) and push inland before the
+ * encounter arms. See silverrunChannel.ts for the world compass contract.
+ */
 export const PASSIVE_ENEMIES: EnemyDefinition[] = [
   {
     id: 'gargoyle-sentinel',
     name: 'Vale Gargoyle',
-    x: 4.9,
-    z: 17.1,
+    x: 0.52,
+    z: -22.09,
     maxHealth: 72,
     radius: 0.72,
     cardHeight: 4.5,
@@ -38,8 +43,8 @@ export const PASSIVE_ENEMIES: EnemyDefinition[] = [
   {
     id: 'bramble-gnoll',
     name: 'Bramble Gnoll',
-    x: 6.2,
-    z: 15.35,
+    x: 3.01,
+    z: -22.62,
     maxHealth: 72,
     radius: 0.64,
     cardHeight: 3.95,
@@ -55,8 +60,8 @@ export const PASSIVE_ENEMIES: EnemyDefinition[] = [
   {
     id: 'silverrun-rat',
     name: 'Silverrun Rat',
-    x: 8.45,
-    z: 18.05,
+    x: 1.57,
+    z: -24.15,
     maxHealth: 48,
     radius: 0.52,
     cardHeight: 3.25,

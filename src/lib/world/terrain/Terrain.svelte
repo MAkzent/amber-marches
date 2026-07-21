@@ -7,7 +7,7 @@
     MeshBasicMaterial,
     SphereGeometry,
   } from 'three'
-  import { completedDiscoveries, dusk } from '../worldState'
+  import { completedDiscoveries, dusk, questRewardGlow } from '../worldState'
   import {
     landmarks,
     landmarkWorldPosition,
@@ -70,7 +70,7 @@
 </T.Mesh>
 
 <T.Mesh geometry={ringGeometry} position={[-20, terrainHeight(-20, -16) + 0.09, -16]} rotation={[-Math.PI / 2, 0, 0]}>
-  <T.MeshBasicMaterial color="#c9a85c" transparent opacity={$completedDiscoveries.has('shrine') ? 0.55 : 0.12} />
+  <T.MeshBasicMaterial color="#c9a85c" transparent opacity={0.12} />
 </T.Mesh>
 
 {#each landmarks as landmark (landmark.id)}
@@ -99,14 +99,14 @@
 
 <StairMist />
 
-{#if $completedDiscoveries.has('shrine')}
+{#if $questRewardGlow}
   <T.Mesh
     geometry={glowGeometry}
     material={glowMaterial}
-    position={[-20, terrainHeight(-20, -16) + 4.8, -16]}
-    scale={[1, 1.5, 1]}
+    position={[-7, terrainHeight(-7, 9) + 3.6, 9]}
+    scale={[1.15, 1.8, 1.15]}
   />
-  <T.PointLight position={[-20, terrainHeight(-20, -16) + 3.2, -16]} color="#ffc66c" intensity={24} distance={15} />
+  <T.PointLight position={[-7, terrainHeight(-7, 9) + 3.2, 9]} color="#ffd780" intensity={26} distance={16} />
 {/if}
 
 {#if $completedDiscoveries.has('watchtower')}
@@ -117,21 +117,6 @@
     scale={[1.2, 2.4, 1.2]}
   />
   <T.PointLight position={[22, terrainHeight(22, -22) + 9.5, -22]} color="#ffb762" intensity={30} distance={22} />
-{/if}
-
-{#if $completedDiscoveries.has('ascent')}
-  <T.Mesh
-    geometry={glowGeometry}
-    material={glowMaterial}
-    position={[WHISPERING_ASCENT.topX, WHISPERING_ASCENT.topY + 5.2, WHISPERING_ASCENT.topZ]}
-    scale={[1.1, 1.8, 1.1]}
-  />
-  <T.PointLight
-    position={[WHISPERING_ASCENT.topX, WHISPERING_ASCENT.topY + 4.4, WHISPERING_ASCENT.topZ]}
-    color="#c4b0e0"
-    intensity={22}
-    distance={16}
-  />
 {/if}
 
 {#if $dusk}

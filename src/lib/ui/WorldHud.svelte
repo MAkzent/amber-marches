@@ -6,18 +6,20 @@
     activeToast,
     audioEnabled,
     completeNearby,
-    discoveryCount,
+    demoEndVisible,
+    dismissDemoEnd,
     introVisible,
     nearbyDiscovery,
     objective,
     playerPosition,
+    questPhase,
     questSteps,
     resetWorld,
     weatherMode,
     type WeatherMode,
   } from '../world/worldState'
   import { formatCount, perfStats } from '../world/perfStats'
-  import { requestAbilitySlot } from '../world/combat'
+  import { battleHud } from '../world/battle'
   import {
     isFullscreenActive,
     subscribeFullscreenChange,
@@ -25,6 +27,7 @@
   } from './fullscreen'
   import DialogueBox from './DialogueBox.svelte'
   import CombatOverlay from './CombatOverlay.svelte'
+  import BattleHud from './BattleHud.svelte'
   import ConverseTuningPanel from './ConverseTuningPanel.svelte'
   import VirtualJoystick from './VirtualJoystick.svelte'
 
@@ -120,9 +123,10 @@
       </div>
     </section>
   {:else}
-    {#if !$activeDialogue}
+    {#if !$activeDialogue && $battleHud.phase === 'idle' && !$battleHud.packCleared}
       <CombatOverlay />
     {/if}
+    <BattleHud />
     <header class="topbar" transition:fade={{ duration: 500 }}>
       <div class="region-mark" aria-label="Current region">
         <span class="sigil" aria-hidden="true">SV</span>
@@ -132,11 +136,13 @@
         </div>
       </div>
 
-      <div class="zone-banner" aria-hidden="true">
-        <i></i>
-        <span>Open World</span>
-        <i></i>
-      </div>
+      {#if $battleHud.phase === 'idle'}
+        <div class="zone-banner" aria-hidden="true">
+          <i></i>
+          <span>Open World</span>
+          <i></i>
+        </div>
+      {/if}
 
       <div class="topbar-actions">
         {#if fullscreenSupported}
@@ -153,50 +159,44 @@
       </div>
     </header>
 
-    <aside class="quest-tracker" transition:fly={{ x: -16, duration: 420 }} aria-label="Quest tracker">
-      <div class="quest-tracker-head">
-        <span class="quest-icon" aria-hidden="true">!</span>
-        <div>
-          <span class="eyebrow">Active Quest</span>
-          <strong>Pilgrim Road</strong>
+    {#if $battleHud.phase === 'idle' && $questPhase !== 'done'}
+      <aside class="quest-tracker" transition:fly={{ x: -16, duration: 420 }} aria-label="Quest tracker">
+        <div class="quest-tracker-head">
+          <span class="quest-icon" aria-hidden="true">!</span>
+          <div>
+            <span class="eyebrow">Quest</span>
+            <strong>Defend Sunmere</strong>
+          </div>
         </div>
-        <b class="quest-count">{$discoveryCount}/5</b>
-      </div>
-      <p class="quest-objective">{$objective}</p>
-      <ul class="quest-steps">
-        {#each $questSteps as step}
-          <li class:done={step.done}>
-            <span class="step-mark" aria-hidden="true">{step.done ? '●' : '○'}</span>
-            <span>{step.label}</span>
-          </li>
-        {/each}
-      </ul>
-      <div class="resonance-bar" aria-label="Vale resonance">
-        <span>Vale resonance</span>
-        <div class="pips">
-          {#each Array(5) as _, index}
-            <i class:lit={index < $discoveryCount}></i>
+        <p class="quest-objective">{$objective}</p>
+        <ul class="quest-steps">
+          {#each $questSteps as step}
+            <li class:done={step.done} class:current={step.current}>
+              <span class="step-mark" aria-hidden="true">{step.done ? '✓' : step.current ? '▸' : '○'}</span>
+              <span>{step.label}</span>
+            </li>
           {/each}
-        </div>
+        </ul>
+      </aside>
+
+      <!-- Screen-up = world −Z = North (see silverrunChannel.ts compass contract). -->
+      <div class="compass" aria-hidden="true" transition:fade={{ duration: 400 }}>
+        <span>W</span><i></i><b>N</b><i></i><span>E</span>
       </div>
-    </aside>
 
-    <div class="compass" aria-hidden="true" transition:fade={{ duration: 400 }}>
-      <span>W</span><i></i><b>N</b><i></i><span>E</span>
-    </div>
+      <footer class="controls" transition:fade={{ duration: 400 }}>
+        <span><kbd>WASD</kbd> Travel</span>
+        <span><kbd>Shift</kbd> Run</span>
+        <span><kbd>Space</kbd> Jump</span>
+        <span><kbd>E</kbd> Interact</span>
+        <span><kbd>Drag</kbd> near foes to battle</span>
+      </footer>
 
-    <footer class="controls" transition:fade={{ duration: 400 }}>
-      <span><kbd>WASD</kbd> Travel</span>
-      <span><kbd>Shift</kbd> Run</span>
-      <span><kbd>Space</kbd> Jump</span>
-      <span><kbd>E</kbd> Interact</span>
-      <span><kbd>1</kbd> Attack</span>
-    </footer>
-
-    <footer class="mobile-hint" transition:fade={{ duration: 400 }}>
-      <span>Touch & drag to move</span>
-      <span>Tap prompt to interact</span>
-    </footer>
+      <footer class="mobile-hint" transition:fade={{ duration: 400 }}>
+        <span>Touch & drag to move</span>
+        <span>Tap prompt to interact</span>
+      </footer>
+    {/if}
 
     <aside class="perf-panel" aria-label="Performance" data-testid="perf-panel" transition:fade={{ duration: 400 }}>
       <div class="perf-fps" data-testid="perf-fps">
@@ -228,19 +228,8 @@
     </aside>
   {/if}
 
-  {#if !$introVisible && !$activeDialogue}
+  {#if !$introVisible && !$activeDialogue && $battleHud.phase === 'idle'}
     <VirtualJoystick />
-    <button
-      class="combat-attack-button"
-      aria-label="Attack"
-      onpointerdown={(event) => {
-        event.preventDefault()
-        requestAbilitySlot(1)
-      }}
-    >
-      <span>1</span>
-      <strong>Hit</strong>
-    </button>
   {/if}
 
   {#if !$introVisible && !$activeDialogue && $nearbyDiscovery}
@@ -273,6 +262,18 @@
         <h2>{$activeToast.title}</h2>
         <p>{$activeToast.description}</p>
       </div>
+    </section>
+  {/if}
+
+  {#if !$introVisible && !$activeDialogue && $demoEndVisible}
+    <section class="demo-end-card" transition:fly={{ y: 28, duration: 480 }} role="status">
+      <span class="crest" aria-hidden="true">✦</span>
+      <div>
+        <span class="eyebrow">Reward</span>
+        <h2>End of the demo</h2>
+        <p>Feel free to explore.</p>
+      </div>
+      <button type="button" class="demo-end-dismiss" onclick={dismissDemoEnd}>Continue</button>
     </section>
   {/if}
 

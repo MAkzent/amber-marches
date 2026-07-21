@@ -13,7 +13,7 @@
     TextureLoader,
   } from 'three'
   import { walkHeight } from '../data/sunmereVale'
-  import { activeDialogue, completedDiscoveries, dusk, reducedMotion } from '../worldState'
+  import { activeDialogue, dusk, priestInteractable, questPhase, reducedMotion } from '../worldState'
   import {
     FRAME_HEIGHT,
     facingRow,
@@ -112,7 +112,7 @@
     actor.faceCamera(camera.current)
     actor.material.color.lerp($dusk ? duskTint : dayTint, 1 - Math.pow(0.02, delta))
 
-    const showArrow = !$completedDiscoveries.has('villager') && !$activeDialogue
+    const showArrow = priestInteractable($questPhase) && !$activeDialogue
     talkArrow.root.visible = showArrow
     if (!showArrow) return
 

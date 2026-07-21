@@ -1,7 +1,9 @@
 <script lang="ts">
+  import { battleHud } from '../world/battle'
   import { combatHud } from '../world/combat'
 </script>
 
+{#if !$battleHud.packCleared}
 <div class="combat-overlay" aria-live="polite">
   {#each $combatHud.enemies as enemy (enemy.id)}
     {#if enemy.onScreen && enemy.alive}
@@ -34,6 +36,7 @@
     {/if}
   {/each}
 </div>
+{/if}
 
 <style>
   .combat-overlay {

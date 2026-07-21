@@ -53,4 +53,21 @@ describe('loot runtime', () => {
     resetLootRuntime()
     expect(getLootDrops()).toHaveLength(0)
   })
+
+  it('keeps rewards grounded until collection is enabled', () => {
+    resetLootRuntime()
+    const surfaceY = () => 0
+    const [drop] = spawnLootBurst(0, 0, 'enemy-c', { random: () => 0.2 })
+
+    tickLoot(LOOT_POP_SECONDS + 0.01, 0, 0, surfaceY, 0, {
+      collectable: false,
+    })
+    tickLoot(LOOT_MAGNET_DELAY + 0.1, drop.x, drop.z, surfaceY, 0, {
+      collectable: false,
+    })
+    expect(getLootDrops()[0].phase).toBe('grounded')
+
+    tickLoot(0.02, drop.x, drop.z, surfaceY, 0, { collectable: true })
+    expect(getLootDrops()[0].phase).toBe('magnet')
+  })
 })

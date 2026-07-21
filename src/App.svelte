@@ -3,6 +3,7 @@
   import WorldCanvas from './lib/world/WorldCanvas.svelte'
   import WorldHud from './lib/ui/WorldHud.svelte'
   import CrtMonitor from './lib/ui/CrtMonitor.svelte'
+  import SceneLoader from './lib/ui/SceneLoader.svelte'
   import { createAudioDirector } from './lib/audio/audioDirector'
   import { detectGraphicsTier, graphicsTier, reducedMotion } from './lib/world/worldState'
 
@@ -22,6 +23,7 @@
 
 <main class="game-shell">
   <CrtMonitor>
+    <SceneLoader />
     <WorldCanvas />
     <WorldHud />
   </CrtMonitor>

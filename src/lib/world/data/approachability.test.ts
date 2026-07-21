@@ -89,16 +89,16 @@ describe('discovery reachability', () => {
     }
   })
 
-  it('keeps centered landmark discoveries larger than collider + hero', () => {
-    const pairs: Array<{ landmarkId: string; discoveryId: string }> = [
-      { landmarkId: 'watchtower', discoveryId: 'watchtower' },
-      { landmarkId: 'shrine-ring', discoveryId: 'shrine' },
-    ]
-    for (const { landmarkId, discoveryId } of pairs) {
-      const landmark = landmarks.find((l) => l.id === landmarkId)!
-      const discovery = discoveries.find((d) => d.id === discoveryId)!
-      const collider = landmarkColliderRadius(landmark)!
-      expect(discovery.radius).toBeGreaterThan(collider + HERO_RADIUS)
-    }
+  it('keeps the Bellkeeper stand clear of village colliders', () => {
+    const villager = discoveries.find((d) => d.id === 'villager')!
+    expect(villager.radius).toBeGreaterThan(HERO_RADIUS)
+    expect(discoveryHasFreeStand(...villager.position, villager.radius)).toBe(true)
+  })
+
+  it('keeps Larkspur Watch larger than its collider plus hero', () => {
+    const landmark = landmarks.find((l) => l.id === 'watchtower')!
+    const discovery = discoveries.find((d) => d.id === 'watchtower')!
+    const collider = landmarkColliderRadius(landmark)!
+    expect(discovery.radius).toBeGreaterThan(collider + HERO_RADIUS)
   })
 })

@@ -12,6 +12,9 @@
 
 import { WATER_SURFACE_Y, riverCenter, sampleRiverAxis } from '../data/silverrunChannel'
 
+/** Walk corridor inset inside visual halfWidth (parapet clearance). */
+export const SPAN_RAIL_INSET = 0.22
+
 export type BridgeSpan = {
   id: string
   /** Deck center in XZ — must sit on the water channel. */
@@ -66,6 +69,69 @@ export function projectOntoSpan(span: BridgeSpan, x: number, z: number) {
   return { along, across }
 }
 
+/** Reconstruct world XZ from span-local coordinates. */
+export function fromSpanLocal(span: BridgeSpan, along: number, across: number) {
+  const [px, pz] = spanPerp(span)
+  return {
+    x: span.x + span.axisX * along + px * across,
+    z: span.z + span.axisZ * along + pz * across,
+  }
+}
+
+/** Walkable half-width inside the visual parapets. */
+export function spanWalkHalfWidth(span: BridgeSpan) {
+  return Math.max(0.2, span.halfWidth - SPAN_RAIL_INSET)
+}
+
+/**
+ * Soft parapet rails for oriented spans:
+ * - on-deck: clamp across so feet cannot walk off the sides
+ * - mid-span flanks: block mounting the corridor from the side
+ * Approaches stay open so banks/roads still feed the deck.
+ */
+export function applySpanRails(
+  fromX: number,
+  fromZ: number,
+  toX: number,
+  toZ: number,
+  radius = 0,
+) {
+  let x = toX
+  let z = toZ
+  for (const span of BRIDGE_SPANS) {
+    const from = projectOntoSpan(span, fromX, fromZ)
+    const to = projectOntoSpan(span, x, z)
+    const walkHalf = spanWalkHalfWidth(span)
+    const alongReach = span.halfLength + span.approachLength
+    const bodyPad = Math.min(radius * 0.35, 0.25)
+    const maxAcross = Math.max(0.15, walkHalf - bodyPad)
+
+    const fromOutside = Math.abs(from.across) > walkHalf
+    const toInside = Math.abs(to.across) <= walkHalf
+    const overStructure = Math.abs(to.along) <= span.halfLength
+
+    // Side-entry block over the structural span (not the bank approaches).
+    if (fromOutside && toInside && overStructure) {
+      const side = Math.sign(from.across || to.across) || 1
+      const clamped = fromSpanLocal(span, to.along, side * (walkHalf + 0.02))
+      x = clamped.x
+      z = clamped.z
+      continue
+    }
+
+    // On-deck guardrails: stay inside the walk corridor while on the span.
+    const onDeck =
+      Math.abs(from.across) <= walkHalf && Math.abs(from.along) <= alongReach
+    if (onDeck && Math.abs(to.along) <= alongReach) {
+      const across = Math.max(-maxAcross, Math.min(maxAcross, to.across))
+      const clamped = fromSpanLocal(span, to.along, across)
+      x = clamped.x
+      z = clamped.z
+    }
+  }
+  return { x, z }
+}
+
 /** Oriented rectangle membership for the walk deck. */
 export function onSpanDeck(span: BridgeSpan, x: number, z: number, margin = 0) {
   const { along, across } = projectOntoSpan(span, x, z)
@@ -90,13 +156,15 @@ export function onSpanCrossingStrip(
   return Math.abs(along) <= span.halfLength + lengthMargin && Math.abs(across) <= halfStripWidth
 }
 
-/** Soft 1→0 falloff from deck center to rectangle edge (walkHeight blend). */
+/**
+ * Soft 1→0 falloff along abutments for walkHeight blend.
+ * Across the walk corridor height stays full; rails keep feet inside.
+ */
 export function spanDeckBlend(span: BridgeSpan, x: number, z: number) {
   const { along, across } = projectOntoSpan(span, x, z)
+  if (Math.abs(across) > spanWalkHalfWidth(span)) return 0
   const alongEdge = span.halfLength + span.approachLength
-  const alongFade = 1 - smoothstep(span.halfLength, alongEdge, Math.abs(along))
-  const acrossFade = 1 - smoothstep(span.halfWidth * 0.78, span.halfWidth, Math.abs(across))
-  return Math.max(0, Math.min(alongFade, acrossFade))
+  return Math.max(0, 1 - smoothstep(span.halfLength, alongEdge, Math.abs(along)))
 }
 
 function smoothstep(edge0: number, edge1: number, value: number) {

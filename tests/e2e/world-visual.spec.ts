@@ -32,46 +32,38 @@ test('opening vista renders and the first discovery is playable', async ({ page 
   await page.keyboard.press('e')
   await page.keyboard.press('e')
   await page.keyboard.press('e')
-  await expect(page.getByRole('heading', { name: 'The Bellkeeper' })).toBeVisible({ timeout: 3000 })
+  await expect(page.getByLabel('Quest tracker')).toContainText(/Defend Sunmere/i)
+  await expect(page.getByLabel('Quest tracker')).toContainText(/defeat the pack to the north/i)
 
   expect(pageErrors).toEqual([])
 })
 
-test('passive enemies take cleave damage and stay defeated', async ({ page }) => {
-  test.setTimeout(45_000)
+test('hex battle enters formation, starts, and returns to explore', async ({ page }) => {
+  test.setTimeout(60_000)
   const pageErrors: string[] = []
   page.on('pageerror', (error) => pageErrors.push(error.message))
 
   await page.goto('/?art=combat')
   await page.getByRole('button', { name: /Enter the vale/i }).click()
-  await page.waitForTimeout(950)
-
-  const gargoyle = page.getByTestId('enemy-health-gargoyle-sentinel')
-  await expect(gargoyle).toBeVisible({ timeout: 5000 })
-  await expect(page.getByTestId('enemy-health-bramble-gnoll')).toBeVisible()
-  await expect(page.getByTestId('enemy-health-silverrun-rat')).toBeVisible()
-
-  await page.keyboard.press('1')
-  await expect(page.getByTestId('damage-number').first()).toBeVisible({ timeout: 2000 })
-  const healthBars = page.locator('[data-testid^="enemy-health-"]')
-  await expect
-    .poll(async () =>
-      healthBars.evaluateAll((nodes) =>
-        nodes.some(
-          (node) =>
-            Number(node.getAttribute('data-health')) <
-            Number(node.getAttribute('data-max-health')),
-        ),
-      ),
-    )
-    .toBe(true)
+  // Horde waits on the north bank (−Z) — cross the bridge from the south approach.
+  await page.keyboard.down('Shift')
+  await page.keyboard.down('w')
+  await expect(page.getByTestId('battle-hud')).toBeVisible({ timeout: 35_000 })
+  await page.keyboard.up('w')
+  await page.keyboard.up('Shift')
+  // Prelude + march-in finish before Start Battle appears.
+  await expect(page.getByTestId('start-battle')).toBeVisible({ timeout: 12_000 })
   await page.screenshot({ path: 'test-results/combat-impact.png' })
 
-  for (let swing = 0; swing < 5; swing += 1) {
-    await page.waitForTimeout(650)
-    await page.keyboard.press('1')
-  }
-  await expect.poll(() => healthBars.count()).toBeLessThan(3)
+  await page.getByTestId('start-battle').click()
+  await expect(page.getByText('Battle', { exact: true }).first()).toBeVisible({ timeout: 3000 })
+  await expect(page.getByTestId('start-battle')).toHaveCount(0)
+  await expect(page.getByTestId('battle-damage').first()).toBeVisible({ timeout: 8000 })
+  await page.screenshot({ path: 'test-results/combat-midfight.png' })
+
+  // Auto-battle resolves; victory settle + soft exit return to open world.
+  await expect(page.getByText('Victory').first()).toBeVisible({ timeout: 25_000 })
+  await expect(page.getByTestId('battle-hud')).toHaveCount(0, { timeout: 8000 })
   await page.screenshot({ path: 'test-results/combat-defeat.png' })
 
   expect(pageErrors).toEqual([])
@@ -94,8 +86,7 @@ test('obstructing trees fade for the controlled character across camera framings
   await page.waitForTimeout(1200)
   await page.screenshot({ path: 'test-results/tree-occlusion.png' })
 
-  // Combat narrows the camera while the same near canopy remains readable.
-  await page.keyboard.press('1')
+  // Soft explore framing still keeps the near canopy readable.
   await page.waitForTimeout(450)
   await page.screenshot({ path: 'test-results/tree-occlusion-combat.png' })
 
@@ -115,15 +106,19 @@ test('obstructing trees fade for the controlled character across camera framings
   expect(pageErrors).toEqual([])
 })
 
-test('mobile combat exposes a touch attack control', async ({ page }) => {
+test('mobile combat exposes Start Battle during formation', async ({ page }) => {
+  test.setTimeout(60_000)
   await page.setViewportSize({ width: 430, height: 760 })
   await page.goto('/?art=combat')
   await page.getByRole('button', { name: /Enter the vale/i }).click()
-  await page.waitForTimeout(950)
-  await expect(page.getByRole('button', { name: 'Attack' })).toBeVisible()
-  await expect(page.getByTestId('enemy-health-gargoyle-sentinel')).toBeVisible()
+  await page.keyboard.down('Shift')
+  await page.keyboard.down('w')
+  await expect(page.getByTestId('start-battle')).toBeVisible({ timeout: 40_000 })
+  await page.keyboard.up('w')
+  await page.keyboard.up('Shift')
   await page.screenshot({ path: 'test-results/mobile-combat.png' })
 })
+
 
 test('the Silverrun bridge and shallow ford remain playable', async ({ page }) => {
   test.setTimeout(60_000)
@@ -226,20 +221,13 @@ test('mobile rotation preserves the canvas and framebuffer proportions', async (
   await context.close()
 })
 
-test('shrine and watchtower art states remain composed through dusk', async ({ page }) => {
-  await page.goto('/?art=shrine')
-  await page.getByRole('button', { name: /Enter the vale/i }).click()
-
-  await page.waitForTimeout(1700)
-  await expect(page.getByRole('button', { name: /Awaken Shrine of Small Mercies/i })).toBeVisible()
-  await page.screenshot({ path: 'test-results/forest-shrine.png' })
-  await page.keyboard.press('e')
-
+test('watchtower banner raises evening light over the vale', async ({ page }) => {
   await page.goto('/?art=watchtower')
   await page.getByRole('button', { name: /Enter the vale/i }).click()
   await page.waitForTimeout(1700)
   await expect(page.getByRole('button', { name: /Raise the banner Larkspur Watch/i })).toBeVisible()
   await page.keyboard.press('e')
+  await expect(page.getByRole('heading', { name: 'Larkspur Watch' })).toBeVisible({ timeout: 3000 })
   await page.waitForTimeout(1800)
   await page.screenshot({ path: 'test-results/watchtower-dusk.png' })
 })

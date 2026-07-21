@@ -16,6 +16,7 @@
     getAttackSwings,
     nextDamageId,
     PASSIVE_ENEMIES,
+    clearCombatHudVitals,
     publishCombatHud,
     pushCombatImpact,
     pushDamageEvents,
@@ -28,6 +29,12 @@
   import { LOOT_DROP_AFTER_DEATH, spawnLootBurst } from '../loot/runtime'
   import { walkHeight } from '../data/sunmereVale'
   import { dusk, playerLive, pulseCombat, reducedMotion } from '../worldState'
+  import {
+    isBattleActive,
+    isBattleActorsHidden,
+    isEncounterCleared,
+    shouldShowOverworldEnemyVitals,
+  } from '../battle'
   import {
     FRAME_HEIGHT,
     facingForVelocity,
@@ -66,7 +73,6 @@
   const projection = new Vector3()
   const resolver = createSwingResolver()
   let resetSerial = combatImpact.resetSerial
-  let publishAccumulator = 0
 
   const { camera, canvas } = useThrelte()
 
@@ -192,10 +198,54 @@
     }
   }
 
+  /** World-space top of the billboard card after plant / bob / squash. */
+  function cardTopY(
+    groundY: number,
+    sprite: Pseudo3DSprite,
+    bob: number,
+    squash: number,
+  ) {
+    return groundY + sprite.bodyBaseY + bob + sprite.height * squash
+  }
+
   useTask((delta) => {
     if (combatImpact.resetSerial !== resetSerial) {
       resetSerial = combatImpact.resetSerial
       resetEnemies()
+    }
+
+    // Hex battle owns this pack after prelude handoff; stay hidden through soft exit / clear.
+    // Always clear overworld vitals when the explore publisher does not own the field —
+    // otherwise CombatOverlay remounts on idle with a stale pre-battle snapshot.
+    if (!shouldShowOverworldEnemyVitals()) {
+      clearCombatHudVitals()
+      if (isEncounterCleared()) {
+        for (const enemy of enemies) {
+          enemy.sprite.root.visible = false
+          enemy.combatant.alive = false
+          enemy.combatant.health = 0
+        }
+        setCombatants(combatants)
+        return
+      }
+      if (isBattleActorsHidden()) {
+        for (const enemy of enemies) enemy.sprite.root.visible = false
+        return
+      }
+      // Prelude: freeze world pack in place while the stage settles in.
+      if (isBattleActive()) {
+        for (const enemy of enemies) {
+          if (!enemy.remainsCleared) {
+            enemy.sprite.root.visible = true
+            enemy.sprite.faceCamera(camera.current)
+          }
+        }
+      }
+      return
+    }
+
+    for (const enemy of enemies) {
+      if (!enemy.remainsCleared) enemy.sprite.root.visible = true
     }
 
     tickDamageEvents(delta)
@@ -292,16 +342,24 @@
       event.onScreen = projected.visible
     }
 
-    publishAccumulator += delta
-    if (publishAccumulator >= 1 / 30 && canvas.clientWidth > 0) {
-      publishAccumulator = 0
+    if (canvas.clientWidth > 0) {
+      // WorldCamera just wrote position/lookAt; refresh matrices before project
+      // so plates track the same transform the renderer will use this frame.
+      camera.current.updateMatrixWorld()
       publishCombatHud(
         enemies.map((enemy) => {
+          const ground = walkHeight(enemy.combatant.x, enemy.combatant.z)
+          const plantedX = enemy.combatant.x + enemy.recoilX * enemy.recoil
+          const plantedZ = enemy.combatant.z + enemy.recoilZ * enemy.recoil
+          const squash = $reducedMotion ? 1 : 1 + Math.min(0.09, enemy.recoil * 0.28)
+          const idleBob =
+            enemy.motion === 'idle' && !$reducedMotion
+              ? Math.sin(enemy.motionElapsed * 3.1 + enemy.definition.x) * 0.018
+              : 0
           const projected = projectWorld(
-            enemy.combatant.x,
-            walkHeight(enemy.combatant.x, enemy.combatant.z) +
-              enemy.definition.cardHeight * 0.88,
-            enemy.combatant.z,
+            plantedX,
+            cardTopY(ground, enemy.sprite, idleBob, squash),
+            plantedZ,
           )
           return {
             id: enemy.combatant.id,

@@ -15,6 +15,7 @@
   import { gbaToonGradient } from '../render/retroPalette'
   import { RIVER_RENDER_ORDER } from './riverConfig'
   import { createBridgeArchSideGeometry, createBridgeWaterShadow } from './bridgeGeometry'
+  import BridgeApproachLamps from './BridgeApproachLamps.svelte'
 
   const span = SILVERRUN_SPAN
   const yaw = spanYawFromAxis(span.axisX, span.axisZ)
@@ -123,3 +124,6 @@
   <T is={caps} />
   <T is={lamps} />
 </T.Group>
+
+<!-- Bank-side tōrō sit in world space so walkHeight can ground them. -->
+<BridgeApproachLamps />

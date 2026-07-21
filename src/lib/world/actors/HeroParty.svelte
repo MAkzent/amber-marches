@@ -22,33 +22,28 @@
     partyLive,
     playerLive,
     playerPosition,
-    pulseCombat,
     reducedMotion,
     touchMove,
     updateNearby,
   } from '../worldState'
+  import {
+    isBattleActorsHidden,
+    isBattleMovementLocked,
+    isPartyReturning,
+    notifyPartyReturnComplete,
+  } from '../battle'
   import { walkHeight, onAscentLane, riverCenter, WATER_SURFACE_Y } from '../data/sunmereVale'
   import { intersectHeightfield } from '../data/heightfieldPick'
   import { HERO_RADIUS, moveWithCollision, overlapsRiver, resolveFreePosition } from '../collision'
   import { clearWaterDisturbanceUnit, pushWaterDisturbance } from '../river/riverDisturbance'
   import {
     createAttackState,
-    attackAnimationDuration,
     combatDelta,
     consumeAbilitySlots,
-    emitCombatAudio,
-    findFocusTarget,
-    getCombatants,
     getLivingEnemyColliders,
-    LEADER_ATTACK_LOADOUT,
-    moduleForSlot,
-    pushAttackSwing,
-    requestAbilitySlot,
     setCombatFocusTarget,
     tickAttack,
     tickAttackSwings,
-    tryActivateSlot,
-    type AttackSlotBinding,
   } from '../combat'
   import {
     FRAME_HEIGHT,
@@ -63,12 +58,12 @@
     type Motion,
   } from './spriteSheet'
   import { createPseudo3DSprite, type Pseudo3DSprite } from './pseudo3dSprite'
-  import { attackAnimationFor } from './attackAnimations'
 
   type HeroDefinition = {
     id: string
     idle: string
     walk: string
+    jump: string
     /** Optional attack sheet — only the leader needs this for now. */
     attack?: string
     cardHeight: number
@@ -117,12 +112,15 @@
   const ASCENT_STEP_UP_RISE = 0.1
   const ASCENT_STEP_JUMP_COOLDOWN = 0.42
   const ASCENT_JUMP_SPEED = 6.4
+  /** Battle sprites dissolve first; overworld heroes then fall back onto their final hexes. */
+  const BATTLE_RETURN_DROP_HEIGHT = 2.8
 
   const definitions: HeroDefinition[] = [
     {
       id: 'paladin',
       idle: '/assets/minifantasy/heroes/paladin/idle.png',
       walk: '/assets/minifantasy/heroes/paladin/walk.png',
+      jump: '/assets/minifantasy/heroes/paladin/jump.png',
       attack: '/assets/minifantasy/heroes/paladin/attack.png',
       cardHeight: 3.9,
     },
@@ -130,23 +128,25 @@
       id: 'ranger',
       idle: '/assets/minifantasy/heroes/ranger/idle.png',
       walk: '/assets/minifantasy/heroes/ranger/walk.png',
+      jump: '/assets/minifantasy/heroes/ranger/jump.png',
       cardHeight: 3.9,
     },
     {
       id: 'wizard',
       idle: '/assets/minifantasy/heroes/wizard/idle.png',
       walk: '/assets/minifantasy/heroes/wizard/walk.png',
+      jump: '/assets/minifantasy/heroes/wizard/jump.png',
       cardHeight: 3.9,
     },
     {
       id: 'assassin',
       idle: '/assets/minifantasy/heroes/assassin/idle.png',
       walk: '/assets/minifantasy/heroes/assassin/walk.png',
+      jump: '/assets/minifantasy/heroes/assassin/jump.png',
       cardHeight: 3.9,
     },
   ]
 
-  const leaderAttackLoadout: AttackSlotBinding[] = [...LEADER_ATTACK_LOADOUT]
   const leaderCombat = createAttackState()
 
   const loader = new TextureLoader()
@@ -168,10 +168,6 @@
   let publishAccumulator = 0
   let waterFxAccumulator = 0
   let waterIdleAccumulator = 0
-  let focusedEnemyId: string | null = null
-  let attackTargetId: string | null = null
-  const FOCUS_RELEASE_PADDING = 0.7
-  const FOCUS_LUNGE = 0.32
   /** How often we *try* to stamp; spacing in riverDisturbance does the real gating. */
   const WATER_FX_TRY_INTERVAL = 0.08
   const artVista = new URLSearchParams(window.location.search).get('art')
@@ -204,12 +200,14 @@
   function createHero(definition: HeroDefinition, index: number): HeroHandle {
     const idle = loadTexture(definition.idle)
     const walk = loadTexture(definition.walk)
+    const jump = loadTexture(definition.jump)
     const attack = definition.attack ? loadTexture(definition.attack) : idle
     const textures = {
       idle,
       walk,
       run: walk,
       attack,
+      jump,
     }
     const bodyBaseY =
       -((FRAME_HEIGHT - FEET_FROM_TOP) / FRAME_HEIGHT) * definition.cardHeight
@@ -325,6 +323,84 @@
     })
   }
 
+  /** Plant at partyLive battle-exit poses and seed the follow trail through them. */
+  function restorePartyFromBattleSlots() {
+    const slots = heroes.map((_, index) => {
+      const slot = partyLive[index]
+      return {
+        x: slot?.x ?? leaderX,
+        z: slot?.z ?? leaderZ,
+      }
+    })
+
+    heroes.forEach((hero, index) => {
+      const { x, z } = slots[index]
+      hero.airborne = false
+      hero.yVelocity = 0
+      hero.stepJumpCooldown = 0
+      hero.footY = walkHeight(x, z)
+      plantHero(hero, x, z)
+      hero.motion = 'idle'
+      hero.motionElapsed = 0
+    })
+
+    // Trail samples so followers keep roughly this formation when travel resumes.
+    lastTrailX = leaderX
+    lastTrailZ = leaderZ
+    for (let i = 0; i < trail.length; i += 1) {
+      const seg = Math.min(slots.length - 2, Math.floor(i / FOLLOWER_GAP))
+      const local = (i % FOLLOWER_GAP) / FOLLOWER_GAP
+      const a = slots[seg]
+      const b = slots[Math.min(slots.length - 1, seg + 1)]
+      trail[i][0] = a.x + (b.x - a.x) * local
+      trail[i][1] = a.z + (b.z - a.z) * local
+    }
+    trail[0][0] = leaderX
+    trail[0][1] = leaderZ
+  }
+
+  function beginBattleReturnDrop() {
+    restorePartyFromBattleSlots()
+    for (const [index, hero] of heroes.entries()) {
+      hero.sprite.root.visible = true
+      hero.sprite.setBob(0)
+      hero.motion = 'jump'
+      hero.motionElapsed = 0
+      if ($reducedMotion) continue
+      hero.footY =
+        walkHeight(hero.x, hero.z) +
+        BATTLE_RETURN_DROP_HEIGHT +
+        index * 0.08
+      hero.yVelocity = -0.8
+      hero.airborne = true
+      hero.sprite.plant(hero.x, hero.z, hero.footY)
+    }
+    if ($reducedMotion) notifyPartyReturnComplete()
+  }
+
+  function tickBattleReturnDrop(delta: number) {
+    let allGrounded = true
+    for (const [index, hero] of heroes.entries()) {
+      advanceMotion(hero, 'jump', delta)
+      integrateJump(hero, delta)
+      hero.sprite.setBob(0)
+      hero.sprite.faceCamera(camera.current)
+      hero.sprite.material.color.lerp(
+        $dusk ? duskTint : dayTint,
+        1 - Math.pow(0.02, delta),
+      )
+      updateSprite(hero, 'jump', hero.lastFacing, hero.motionElapsed + index * 0.04)
+      const slot = partyLive[index]
+      if (slot) {
+        slot.x = hero.x
+        slot.y = hero.footY
+        slot.z = hero.z
+      }
+      if (hero.airborne) allGrounded = false
+    }
+    if (allGrounded) notifyPartyReturnComplete()
+  }
+
   function recordTrail(x: number, z: number) {
     let dx = x - lastTrailX
     let dz = z - lastTrailZ
@@ -381,8 +457,8 @@
       updateNearby(x, z)
       return
     }
-    if (event.key === '1' && !get(activeDialogue)) {
-      requestAbilitySlot(1)
+    if (event.key === '1' && !get(activeDialogue) && !isBattleMovementLocked()) {
+      // Open-world slash retired for hex encounters; keep slot for non-battle only if needed.
       return
     }
     if (event.key === ' ') {
@@ -411,6 +487,7 @@
     // Touch travel is handled by the floating joystick; keep click-to-move for mouse.
     if (event.pointerType === 'touch') return
     if (event.pointerType === 'mouse' && event.button !== 0) return
+    if (isBattleMovementLocked()) return
     const rect = canvas.getBoundingClientRect()
     pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
     pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
@@ -434,88 +511,57 @@
     }
   })
 
+  let wasBattleLocked = false
+  let returnDropActive = false
+
   useTask((delta) => {
     const eventDelta = delta
     delta = combatDelta(delta)
     elapsed += delta
-    const combatants = getCombatants()
-    const activeTarget = attackTargetId
-      ? combatants.find((combatant) => combatant.id === attackTargetId && combatant.alive)
-      : undefined
-    if (attackTargetId && !activeTarget) attackTargetId = null
 
-    if (!leaderCombat.active) {
-      const module = moduleForSlot(leaderAttackLoadout, 1)
-      const nearby =
-        module?.delivery.kind === 'melee-arc'
-          ? findFocusTarget(
-              leaderX,
-              leaderZ,
-              'party',
-              combatants,
-              module.delivery.range + FOCUS_RELEASE_PADDING,
-              focusedEnemyId ?? undefined,
-            )
-          : undefined
-      focusedEnemyId = nearby?.id ?? null
-    }
-    setCombatFocusTarget(attackTargetId ?? focusedEnemyId)
-
-    if (!get(activeDialogue)) {
-      for (const slot of consumeAbilitySlots()) {
-        const boundModule = moduleForSlot(leaderAttackLoadout, slot)
-        const animation = boundModule
-          ? attackAnimationFor(definitions[0].id, boundModule.id)
-          : undefined
-        const activated = tryActivateSlot(
-          leaderCombat,
-          leaderAttackLoadout,
-          slot,
-          animation,
-        )
-        if (activated) {
-          const target =
-            activated.delivery.kind === 'melee-arc'
-              ? findFocusTarget(
-                  leaderX,
-                  leaderZ,
-                  'party',
-                  combatants,
-                  activated.delivery.range,
-                  focusedEnemyId ?? undefined,
-                )
-              : undefined
-          attackTargetId = target?.id ?? null
-          focusedEnemyId = attackTargetId ?? focusedEnemyId
-          setCombatFocusTarget(attackTargetId ?? focusedEnemyId)
-          if (target) {
-            heroes[0].lastFacing = facingForVelocity(
-              target.x - leaderX,
-              target.z - leaderZ,
-              heroes[0].lastFacing,
-            )
-          }
-          emitCombatAudio('swing')
-          pulseCombat()
+    const battleLocked = isBattleMovementLocked()
+    const actorsHidden = isBattleActorsHidden()
+    if (battleLocked) {
+      wasBattleLocked = true
+      hasClickTarget = false
+      consumeAbilitySlots()
+      if (isPartyReturning()) {
+        if (!returnDropActive) {
+          returnDropActive = true
+          leaderX = playerLive.x
+          leaderZ = playerLive.z
+          beginBattleReturnDrop()
         }
+        if (isPartyReturning()) tickBattleReturnDrop(delta)
+        return
       }
+      for (const hero of heroes) hero.sprite.root.visible = !actorsHidden
+      if (actorsHidden) return
+      // Prelude: freeze in place while camera/veil lead.
+      for (const hero of heroes) {
+        hero.sprite.faceCamera(camera.current)
+      }
+      return
     }
-    const attackTick = tickAttack(leaderCombat, delta)
+    if (wasBattleLocked) {
+      wasBattleLocked = false
+      leaderX = playerLive.x
+      leaderZ = playerLive.z
+      // A completed drop already restored the final battle formation and trail.
+      if (returnDropActive) returnDropActive = false
+      else restorePartyFromBattleSlots()
+      for (const hero of heroes) hero.sprite.root.visible = true
+    }
+
+    // Hex battles own combat — open-world slash stays idle.
+    setCombatFocusTarget(null)
+    consumeAbilitySlots()
+    tickAttack(leaderCombat, delta)
     tickAttackSwings(eventDelta)
-    if (attackTick.hitModule) {
-      pushAttackSwing(
-        definitions[0].id,
-        attackTick.hitModule.id,
-        leaderX,
-        leaderZ,
-        heroes[0].lastFacing,
-        attackTargetId ?? undefined,
-      )
-    }
 
     let inputRight = 0
     let inputForward = 0
-    if (!get(activeDialogue) && !attackTick.movementLocked) {
+    if (!get(activeDialogue)) {
       if (keys.has('a') || keys.has('arrowleft')) inputRight -= 1
       if (keys.has('d') || keys.has('arrowright')) inputRight += 1
       if (keys.has('w') || keys.has('arrowup')) inputForward += 1
@@ -527,7 +573,7 @@
     let moveX = 0
     let moveZ = 0
 
-    if (get(activeDialogue) || attackTick.movementLocked) {
+    if (get(activeDialogue)) {
       hasClickTarget = false
     } else if (inputRight || inputForward) {
       hasClickTarget = false
@@ -591,38 +637,16 @@
     const leaderMoving = Math.hypot(leaderMovedX, leaderMovedZ) > 0.001
     if (leaderMoving) recordTrail(leaderX, leaderZ)
 
-    const lockedTarget = attackTargetId
-      ? combatants.find((combatant) => combatant.id === attackTargetId && combatant.alive)
-      : undefined
-    const leaderFacing =
-      lockedTarget && (attackTick.active || attackTick.hitModule)
-        ? facingForVelocity(
-            lockedTarget.x - leaderX,
-            lockedTarget.z - leaderZ,
-            heroes[0].lastFacing,
-          )
-        : facingForVelocity(leaderMovedX, leaderMovedZ, heroes[0].lastFacing)
+    const leaderFacing = facingForVelocity(
+      leaderMovedX,
+      leaderMovedZ,
+      heroes[0].lastFacing,
+    )
     heroes[0].lastFacing = leaderFacing
 
     heroes[0].x = leaderX
     heroes[0].z = leaderZ
     integrateJump(heroes[0], delta)
-    if (lockedTarget && leaderCombat.active && !$reducedMotion) {
-      const progress = Math.min(
-        1,
-        leaderCombat.active.elapsed /
-          Math.max(
-            0.001,
-            attackAnimationDuration(leaderCombat.active.animation),
-          ),
-      )
-      const distance = Math.hypot(lockedTarget.x - leaderX, lockedTarget.z - leaderZ) || 1
-      const lunge = Math.sin(progress * Math.PI) * FOCUS_LUNGE
-      heroes[0].sprite.root.position.x +=
-        ((lockedTarget.x - leaderX) / distance) * lunge
-      heroes[0].sprite.root.position.z +=
-        ((lockedTarget.z - leaderZ) / distance) * lunge
-    }
 
     const cam = camera.current
     waterFxAccumulator += delta
@@ -672,17 +696,10 @@
       const waterMoving =
         heroMoving || (index > 0 && Math.hypot(leaderMovedX, leaderMovedZ) > 0.001)
       // Stairs force the walk cycle — no sprinting up the mist cliff.
-      // Leader plays attack motion while a combat module is active.
-      const motion =
-        index === 0 && attackTick.active
-          ? attackTick.active.motion
-          : motionForMovement(heroMoving, wantsToRun && !onStairs)
+      const motion = hero.airborne
+        ? 'jump'
+        : motionForMovement(heroMoving, wantsToRun && !onStairs)
       advanceMotion(hero, motion, delta)
-      if (index === 0 && attackTick.active && leaderCombat.active) {
-        // Render and gameplay sample the same authored timeline: when the
-        // controller fires impactFrame, the matching sprite frame is visible.
-        hero.motionElapsed = leaderCombat.active.elapsed
-      }
       const fording = overlapsRiver(hero.x, hero.z, HERO_RADIUS * 0.35)
       const climbBob =
         onStairs && heroMoving && !hero.airborne && !$reducedMotion
@@ -748,7 +765,6 @@
       playerPosition.set([leaderX, leaderZ])
       updateNearby(leaderX, leaderZ)
     }
-    if (!leaderCombat.active) attackTargetId = null
   })
 </script>
 

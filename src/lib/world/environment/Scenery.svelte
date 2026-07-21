@@ -16,7 +16,22 @@
   import { WIND, getWindTime, windEnvelope } from '../atmosphere/wind'
   import { gbaToonGradient } from '../render/retroPalette'
   import { reducedMotion, weatherMode } from '../worldState'
+  import { battleHud, ENCOUNTER_ORIGIN } from '../battle'
   import NatureTree from './NatureTree.svelte'
+
+  /** Soft-clear trees near the hex board as the battle stage settles in. */
+  const BATTLE_TREE_CLEAR_RADIUS = 18
+
+  function treeBattleOpacity(x: number, z: number) {
+    const blend = $battleHud.stageBlend
+    if (blend < 0.01) return 1
+    const dist = Math.hypot(x - ENCOUNTER_ORIGIN.x, z - ENCOUNTER_ORIGIN.z)
+    if (dist >= BATTLE_TREE_CLEAR_RADIUS) return 1
+    // Inner trees fade fully; edge of the clear ring keeps a soft silhouette.
+    const edge = dist / BATTLE_TREE_CLEAR_RADIUS
+    const clear = 1 - edge * edge
+    return Math.max(0, 1 - blend * clear)
+  }
 
   const OAK_MODELS = [
     '/assets/cc0/quaternius-nature/glTF/CommonTree_1.gltf',
@@ -110,7 +125,8 @@
       if (pollenPositions[i + 1] < 0.6) pollenPositions[i + 1] = 12
     }
     pollenAttribute.needsUpdate = true
-    pollenMaterial.opacity = 0.36 + strength * 0.14
+    const battleClarity = 1 - $battleHud.stageBlend * 0.85
+    pollenMaterial.opacity = (0.36 + strength * 0.14) * battleClarity
   })
 
   function treeScale(pointScale: number) {
@@ -129,6 +145,7 @@
     rotation={[0, point.hue * Math.PI * 2, 0]}
     scale={treeScale(point.scale)}
     phase={point.hue}
+    opacityMul={treeBattleOpacity(point.x, point.z)}
   />
 {/each}
 
@@ -139,6 +156,7 @@
     rotation={[0, point.hue * Math.PI * 2, 0]}
     scale={treeScale(point.scale)}
     phase={point.hue}
+    opacityMul={treeBattleOpacity(point.x, point.z)}
   />
 {/each}
 

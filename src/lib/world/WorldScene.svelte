@@ -10,9 +10,12 @@
   import PassiveEnemies from './actors/PassiveEnemies.svelte'
   import CombatHitFx from './combat/CombatHitFx.svelte'
   import LootDrops from './loot/LootDrops.svelte'
+  import BattleField from './battle/BattleField.svelte'
+  import BattleGroundFade from './battle/BattleGroundFade.svelte'
+  import BattleUnits from './battle/BattleUnits.svelte'
   import ValeNpc from './actors/ValeNpc.svelte'
+  import WatchtowerMarker from './environment/WatchtowerMarker.svelte'
   import WorldCamera from './camera/WorldCamera.svelte'
-  import DiscoveryMarkers from './environment/DiscoveryMarkers.svelte'
   import WorldRenderer from './render/WorldRenderer.svelte'
   import { get } from 'svelte/store'
   import { dusk, graphicsTier, weatherMode } from './worldState'
@@ -67,9 +70,12 @@
 <River />
 <GrassField />
 <Scenery />
-<DiscoveryMarkers />
+<WatchtowerMarker />
 <ValeNpc />
 <PassiveEnemies />
+<BattleGroundFade />
+<BattleField />
+<BattleUnits />
 <CombatHitFx />
 <LootDrops />
 <HeroParty />

@@ -1,10 +1,13 @@
 export {
   BRIDGE_SPANS,
   SILVERRUN_SPAN,
+  SPAN_RAIL_INSET,
   type BridgeSpan,
   anySpanCrossingStrip,
   anySpanWaterShadow,
+  applySpanRails,
   findSpanAt,
+  fromSpanLocal,
   halfLengthToBanks,
   onSpanCrossingStrip,
   onSpanDeck,
@@ -13,6 +16,7 @@ export {
   spanAbutments,
   spanDeckBlend,
   spanPerp,
+  spanWalkHalfWidth,
   spanWaterShadowFactor,
   spanYawFromAxis,
 } from './crossings'

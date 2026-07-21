@@ -13,9 +13,18 @@
     scale?: number
     /** 0–1 phase so neighboring trees don't sway in lockstep. */
     phase?: number
+    /** Extra multiplier (e.g. soft battle clear). 1 = fully visible. */
+    opacityMul?: number
   }
 
-  let { url, position, rotation = [0, 0, 0], scale = 1, phase = 0 }: Props = $props()
+  let {
+    url,
+    position,
+    rotation = [0, 0, 0],
+    scale = 1,
+    phase = 0,
+    opacityMul = 1,
+  }: Props = $props()
 
   const { load } = useGltf()
   const { camera } = useThrelte()
@@ -29,10 +38,15 @@
     transparent: boolean
     depthWrite: boolean
   }> = []
-  const meshStates: Array<{ mesh: Mesh; renderOrder: number }> = []
+  const meshStates: Array<{
+    mesh: Mesh
+    renderOrder: number
+    castShadow: boolean
+  }> = []
   let boundsReady = false
   let currentOpacity = 1
   let transparentMode = false
+  let shadowsEnabled = true
 
   const FADED_TREE_RENDER_ORDER = 5
   const FADE_IN_RATE = 14
@@ -55,6 +69,14 @@
   function applyOpacity(opacity: number) {
     for (const state of materialStates) {
       state.material.opacity = state.opacity * opacity
+    }
+  }
+
+  function setShadowMode(enabled: boolean) {
+    if (shadowsEnabled === enabled) return
+    shadowsEnabled = enabled
+    for (const state of meshStates) {
+      state.mesh.castShadow = enabled && state.castShadow
     }
   }
 
@@ -87,7 +109,11 @@
           return material
         })
         mesh.material = Array.isArray(mesh.material) ? cloned : cloned[0]
-        meshStates.push({ mesh, renderOrder: mesh.renderOrder })
+        meshStates.push({
+          mesh,
+          renderOrder: mesh.renderOrder,
+          castShadow: mesh.castShadow,
+        })
       })
 
       new Box3().setFromObject(clone).getBoundingSphere(localBounds)
@@ -103,6 +129,7 @@
       boundsReady = false
       currentOpacity = 1
       transparentMode = false
+      shadowsEnabled = true
     }
   })
 
@@ -124,12 +151,13 @@
     const candidateOpacity = controlledCharacter
       ? treeOcclusionOpacity(camera.current.position, worldBounds, controlledCharacter)
       : 1
-    const targetOpacity =
+    const occlusionTarget =
       controlledCharacter &&
       candidateOpacity < 1 &&
       treeActuallyOccludesCharacter(scene, camera.current.position, controlledCharacter)
         ? candidateOpacity
         : 1
+    const targetOpacity = occlusionTarget * Math.max(0, Math.min(1, opacityMul))
 
     if ($reducedMotion) {
       currentOpacity = targetOpacity
@@ -143,6 +171,14 @@
     const shouldBlend = targetOpacity < 0.999 || currentOpacity < 0.995
     setTransparentMode(shouldBlend)
     applyOpacity(currentOpacity)
+    // Transparent tree materials still render opaque shadow-map silhouettes.
+    // Use hysteresis so battle-cleared trees cannot leave giant stale shadows.
+    setShadowMode(
+      shadowsEnabled
+        ? currentOpacity > 0.3
+        : currentOpacity > 0.62,
+    )
+    pivot.visible = currentOpacity > 0.02
   })
 </script>
 

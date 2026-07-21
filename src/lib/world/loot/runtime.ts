@@ -126,8 +126,10 @@ export function tickLoot(
   heroZ: number,
   surfaceY: (x: number, z: number) => number,
   heroSurfaceY?: number,
+  options?: { collectable?: boolean },
 ): LootCollectEvent[] {
   const collected: LootCollectEvent[] = []
+  const collectable = options?.collectable ?? true
 
   for (let index = drops.length - 1; index >= 0; index -= 1) {
     const drop = drops[index]
@@ -153,6 +155,7 @@ export function tickLoot(
     if (drop.phase === 'grounded') {
       drop.groundAge += delta
       drop.y = surfaceY(drop.x, drop.z)
+      if (!collectable) continue
       if (drop.groundAge >= LOOT_MAGNET_DELAY) {
         const dist = Math.hypot(heroX - drop.x, heroZ - drop.z)
         if (dist <= LOOT_MAGNET_RADIUS) {
@@ -164,6 +167,12 @@ export function tickLoot(
     }
 
     if (drop.phase === 'magnet') {
+      if (!collectable) {
+        drop.phase = 'grounded'
+        drop.magnetSpeed = 0
+        drop.y = surfaceY(drop.x, drop.z)
+        continue
+      }
       const dx = heroX - drop.x
       const dz = heroZ - drop.z
       const dist = Math.hypot(dx, dz) || 0.0001
@@ -187,6 +196,7 @@ export function tickLoot(
     }
 
     if (drop.phase === 'showcase') {
+      if (!collectable) continue
       drop.showcaseAge += delta
       const ground = heroSurfaceY ?? surfaceY(heroX, heroZ)
       drop.x = heroX

@@ -1,20 +1,30 @@
 import { describe, expect, it } from 'vitest'
 import {
   ROAD_SCENERY_CLEARANCE,
+  BRIDGE_APPROACH_OUTWARD,
+  LANTERN_ROAD_SHOULDER,
+  LANTERN_SPACING,
+  LANTERN_WATER_CLEARANCE,
   MISTCLIFF_MOUNTAIN,
   SILVERRUN_BRIDGE,
   SILVERRUN_SPAN,
   WATER_SURFACE_Y,
   WHISPERING_ASCENT,
   ascentPointAt,
+  bridgeApproachLanterns,
   bridgeDeckBlend,
+  buildBridgeApproachLanterns,
+  buildPilgrimLanterns,
   distanceToNearestRoad,
   inRiverChannel,
+  isDryLanternGround,
   isWalkable,
   landmarks,
   onMistcliffSummit,
   onBridgeDeck,
+  pilgrimLanterns,
   roadPaths,
+  sampleRiver,
   sampleRiverAxis,
   sampleRoadCenterline,
   scenery,
@@ -171,4 +181,50 @@ describe('Sunmere Vale scene data', () => {
       }
     }
   })
+
+  it('keeps pilgrim lanterns on dry road shoulders, never in the channel', () => {
+    expect(pilgrimLanterns.length).toBeGreaterThan(6)
+    expect(pilgrimLanterns.length).toBeLessThan(20)
+
+    for (const [x, z] of pilgrimLanterns) {
+      expect(isDryLanternGround(x, z)).toBe(true)
+      expect(inRiverChannel(x, z)).toBe(false)
+      expect(onBridgeDeck(x, z, 0.5)).toBe(false)
+      const river = sampleRiver(x, z)
+      expect(river.distance).toBeGreaterThanOrEqual(river.waterHalfWidth + LANTERN_WATER_CLEARANCE)
+      expect(distanceToNearestRoad(x, z)).toBeLessThanOrEqual(LANTERN_ROAD_SHOULDER + 0.35)
+    }
+
+    for (let i = 0; i < pilgrimLanterns.length; i += 1) {
+      for (let j = i + 1; j < pilgrimLanterns.length; j += 1) {
+        const [ax, az] = pilgrimLanterns[i]
+        const [bx, bz] = pilgrimLanterns[j]
+        expect(Math.hypot(ax - bx, az - bz)).toBeGreaterThanOrEqual(LANTERN_SPACING - 1e-6)
+      }
+    }
+  })
+
+  it('rejects the old mid-channel lantern waypoints', () => {
+    expect(isDryLanternGround(-1, 2)).toBe(false)
+    expect(isDryLanternGround(3, -1)).toBe(false)
+    expect(buildPilgrimLanterns().some(([x, z]) => Math.hypot(x + 1, z - 2) < 0.5)).toBe(false)
+    expect(buildPilgrimLanterns().some(([x, z]) => Math.hypot(x - 3, z + 1) < 0.5)).toBe(false)
+  })
+
+  it('places four shrine lamps off the deck at both Silverrun approaches', () => {
+    expect(bridgeApproachLanterns).toHaveLength(4)
+    expect(buildBridgeApproachLanterns()).toEqual(bridgeApproachLanterns)
+
+    const abutments = spanAbutments(SILVERRUN_SPAN)
+    for (const [x, z] of bridgeApproachLanterns) {
+      expect(isDryLanternGround(x, z)).toBe(true)
+      expect(inRiverChannel(x, z)).toBe(false)
+      expect(onBridgeDeck(x, z, 0.5)).toBe(false)
+      const nearAbutment = abutments.some(
+        ([ax, az]) => Math.hypot(ax - x, az - z) < BRIDGE_APPROACH_OUTWARD + LANTERN_ROAD_SHOULDER + 0.35,
+      )
+      expect(nearAbutment).toBe(true)
+    }
+  })
 })
+

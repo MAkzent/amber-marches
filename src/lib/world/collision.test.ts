@@ -10,6 +10,13 @@ import {
   worldColliders,
 } from './collision'
 import {
+  SILVERRUN_SPAN,
+  fromSpanLocal,
+  projectOntoSpan,
+  spanDeckHeight,
+  spanWalkHalfWidth,
+} from './build/crossings'
+import {
   SILVERRUN_BRIDGE,
   bridgeDeckBlend,
   collisionCircles,
@@ -128,6 +135,43 @@ describe('hero collision', () => {
         expect(walkHeight(x, z)).toBeGreaterThan(terrainHeight(x, z) + 0.05)
       }
     }
+  })
+
+  it('keeps sideways bridge walks on the deck with stable walkHeight', () => {
+    const walkHalf = spanWalkHalfWidth(SILVERRUN_SPAN)
+    let pos = fromSpanLocal(SILVERRUN_SPAN, 0, 0)
+    const centerY = walkHeight(pos.x, pos.z)
+    const [px, pz] = [-SILVERRUN_SPAN.axisZ, SILVERRUN_SPAN.axisX]
+    for (let step = 0; step < 16; step += 1) {
+      pos = moveWithCollision(pos.x, pos.z, px * 0.2, pz * 0.2, HERO_RADIUS)
+    }
+    const across = Math.abs(projectOntoSpan(SILVERRUN_SPAN, pos.x, pos.z).across)
+    expect(across).toBeLessThanOrEqual(walkHalf)
+    expect(walkHeight(pos.x, pos.z)).toBeCloseTo(
+      spanDeckHeight(SILVERRUN_SPAN, pos.x, pos.z),
+      1,
+    )
+    expect(Math.abs(walkHeight(pos.x, pos.z) - centerY)).toBeLessThan(0.05)
+  })
+
+  it('cannot mount the bridge deck from a mid-span flank', () => {
+    const walkHalf = spanWalkHalfWidth(SILVERRUN_SPAN)
+    const flank = fromSpanLocal(SILVERRUN_SPAN, 0, walkHalf + 1.2)
+    // Start just outside the walk corridor; rails must keep flanks from mounting mid-span.
+    let pos = flank
+    const [px, pz] = [-SILVERRUN_SPAN.axisZ, SILVERRUN_SPAN.axisX]
+    const towardCenter = -Math.sign(projectOntoSpan(SILVERRUN_SPAN, flank.x, flank.z).across)
+    for (let step = 0; step < 20; step += 1) {
+      pos = moveWithCollision(
+        pos.x,
+        pos.z,
+        px * towardCenter * 0.18,
+        pz * towardCenter * 0.18,
+        HERO_RADIUS,
+      )
+    }
+    const across = Math.abs(projectOntoSpan(SILVERRUN_SPAN, pos.x, pos.z).across)
+    expect(across).toBeGreaterThan(walkHalf)
   })
 
   it('blocks the hero footprint against landmark buildings', () => {

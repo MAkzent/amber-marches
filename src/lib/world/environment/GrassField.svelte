@@ -7,6 +7,7 @@
   import { getWindTime, windEnvelope } from '../atmosphere/wind'
   import { get } from 'svelte/store'
   import { graphicsTier, partyLive, reducedMotion } from '../worldState'
+  import { battleHud, ENCOUNTER_ORIGIN } from '../battle'
   import {
     createKenneyGrassField,
     GRASS_STEP_DESKTOP,
@@ -71,6 +72,7 @@
     field.setTime(t)
     // Soft carpet breeze — keep well below the old wheat-field lean.
     field.setWindStrength((0.18 + push * 0.12 + strength * 0.06) * motion)
+    field.setBattleClear($battleHud.stageBlend, ENCOUNTER_ORIGIN.x, ENCOUNTER_ORIGIN.z)
 
     for (let i = 0; i < partyLive.length; i += 1) {
       const hero = partyLive[i]

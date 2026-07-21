@@ -1,9 +1,11 @@
 /**
- * Whispering Ascent — mysterious cliff stairs southwest of Shrinewood.
+ * Whispering Ascent — mysterious cliff stairs northeast of Shrinewood.
  *
  * Walk surface and visuals share the same procedural step descriptors. The
  * renderer turns each descriptor into simple Three.js stone geometry, keeping
  * the visible tread tops aligned with the analytical hero walk surface.
+ *
+ * Compass: −Z north, +Z south (see silverrunChannel.ts).
  */
 
 export type StairProjection = {
@@ -31,8 +33,8 @@ export type AscentSample = {
 }
 
 /**
- * Centerline climbs south-west into the mist cliff.
- * Camera sits SE of the party, so the flight reads bottom-near → top-far (up-left).
+ * Centerline climbs north-west (−X/−Z) into the mist cliff.
+ * Camera sits south-east of the party, so the flight reads bottom-near → top-far (up-left).
  */
 export const WHISPERING_ASCENT = {
   id: 'whispering-ascent',

@@ -4,6 +4,12 @@
  * Terrain, rendering, crossings, vegetation and collision all sample this file.
  * The old river used one sine and several unrelated width constants; this profile
  * deliberately carries the whole corridor contract in one smooth data set.
+ *
+ * World compass (matches HUD W–N–E and the explore camera looking toward −Z):
+ *   −Z = North (screen-up; forest / enemy pack / shrinewood)
+ *   +Z = South (toward camera; village / Bellkeeper / default spawn)
+ *   +X = East, −X = West
+ * Silverrun runs roughly east–west; cross north from the village bank to the pack.
  */
 
 export const WATER_SURFACE_Y = -0.3

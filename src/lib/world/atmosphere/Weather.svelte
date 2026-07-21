@@ -17,6 +17,7 @@
     weatherMode,
     type WeatherMode,
   } from '../worldState'
+  import { battleHud } from '../battle'
   import { WIND, getWindTime, windEnvelope } from './wind'
 
   const MAX = 2800
@@ -49,6 +50,7 @@
     uWind: { value: new Vector2(0.24, 0.07) },
     uGust: { value: 0 },
     uMotion: { value: 1 },
+    uClarity: { value: 1 },
   }
 
   const material = new ShaderMaterial({
@@ -132,6 +134,7 @@
       varying float vMode;
       varying float vFade;
       varying float vSize;
+      uniform float uClarity;
 
       void main() {
         vec2 d = gl_PointCoord - 0.5;
@@ -167,6 +170,7 @@
           color = mix(bright, mix(softBlue, cool, fract(vSeed * 3.7)), 0.3 + vSeed * 0.35);
         }
 
+        alpha *= uClarity;
         if (alpha < 0.02) discard;
         gl_FragColor = vec4(color, alpha);
       }
@@ -205,6 +209,7 @@
 
   useTask((delta) => {
     uniforms.uTime.value += delta
+    uniforms.uClarity.value = 1 - $battleHud.stageBlend * 0.6
     const mode = $weatherMode
     if (mode === 'snow') {
       const { gust, push } = windEnvelope(getWindTime())

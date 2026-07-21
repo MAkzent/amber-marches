@@ -60,11 +60,16 @@ export type GrassTuft = {
   kind: 'grass' | 'leafs'
 }
 
+/** Soft-clear radius matching Scenery BATTLE_TREE_CLEAR_RADIUS. */
+export const BATTLE_GRASS_CLEAR_RADIUS = 18
+
 export type GrassFieldHandle = {
   root: Group
   setTime: (t: number) => void
   setWindStrength: (strength: number) => void
   setBenders: (benders: GrassBender[]) => void
+  /** Soft-clear tufts near the encounter as stageBlend settles in. */
+  setBattleClear: (blend: number, centerX: number, centerZ: number) => void
   dispose: () => void
 }
 
@@ -196,20 +201,35 @@ function attachGrassShader(
         uniform float uWind;
         uniform vec2 uWindDir;
         uniform vec4 uBenders[${MAX_BENDERS}];
+        uniform vec2 uBattleCenter;
+        uniform float uBattleRadius;
+        uniform float uStageBlend;
         varying float vGust;
-        varying float vTrample;`,
+        varying float vTrample;
+        varying float vBattleOp;`,
       )
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
         vGust = 0.0;
         vTrample = 0.0;
+        vBattleOp = 1.0;
         #ifdef USE_INSTANCING
         {
           vec3 root = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
           float yw = max(transformed.y, 0.0);
           float hNorm = clamp(yw / ${h}, 0.0, 1.0);
           float h2 = hNorm * hNorm;
+
+          // Soft-clear near the hex board (same curve as Scenery treeBattleOpacity).
+          if (uStageBlend > 0.01) {
+            float battleDist = length(root.xz - uBattleCenter);
+            if (battleDist < uBattleRadius) {
+              float edge = battleDist / uBattleRadius;
+              float clear = 1.0 - edge * edge;
+              vBattleOp = max(0.0, 1.0 - uStageBlend * clear);
+            }
+          }
 
           // One soft press field — take the strongest disc, never sum them
           // (party + trail used to stack and stretch tufts sideways).
@@ -260,17 +280,20 @@ function attachGrassShader(
         uniform vec3 uGustTint;
         uniform vec3 uTrampleDark;
         varying float vGust;
-        varying float vTrample;`,
+        varying float vTrample;
+        varying float vBattleOp;`,
       )
       .replace(
         '#include <color_fragment>',
         `#include <color_fragment>
+        if (vBattleOp < 0.02) discard;
+        diffuseColor.a *= vBattleOp;
         diffuseColor.rgb = mix(diffuseColor.rgb, uGustTint, vGust * 0.1);
         diffuseColor.rgb = mix(diffuseColor.rgb, uTrampleDark, vTrample * 0.22);`,
       )
   }
 
-  material.customProgramCacheKey = () => `kenney-grass-subtle-v2-${h}`
+  material.customProgramCacheKey = () => `kenney-grass-battle-clear-v1-${h}`
 }
 
 function bucketTufts(tufts: GrassTuft[]): Map<string, GrassTuft[]> {
@@ -302,6 +325,8 @@ function makeMaterial(
   const material = new MeshToonMaterial({
     color: tint,
     gradientMap: gbaToonGradient,
+    transparent: true,
+    depthWrite: false,
   })
   attachGrassShader(material, uniforms, localHeight)
   return material
@@ -329,6 +354,7 @@ export function createKenneyGrassField(
   tufts = sampleGrassTufts(),
 ): GrassFieldHandle {
   const benderVecs = Array.from({ length: MAX_BENDERS }, () => new Vector4(0, 0, 0, 0))
+  const battleCenter = new Vector2(0, 0)
   const uniforms: Record<string, IUniform> = {
     uTime: { value: 0 },
     uWind: { value: 0.55 },
@@ -336,6 +362,9 @@ export function createKenneyGrassField(
     uBenders: { value: benderVecs },
     uGustTint: { value: GUST_SILVER },
     uTrampleDark: { value: TRAMPLE_DARK },
+    uBattleCenter: { value: battleCenter },
+    uBattleRadius: { value: BATTLE_GRASS_CLEAR_RADIUS },
+    uStageBlend: { value: 0 },
   }
 
   const grassMat = makeMaterial(GRASS_TINT, uniforms, 0.254)
@@ -388,6 +417,10 @@ export function createKenneyGrassField(
         if (b) benderVecs[i].set(b.x, b.z, b.r, 0)
         else benderVecs[i].set(0, 0, 0, 0)
       }
+    },
+    setBattleClear(blend, centerX, centerZ) {
+      uniforms.uStageBlend.value = blend
+      battleCenter.set(centerX, centerZ)
     },
     dispose() {
       for (const mesh of meshes) {

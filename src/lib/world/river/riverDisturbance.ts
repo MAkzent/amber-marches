@@ -6,6 +6,8 @@
  * Spacing is per-unit so one hero's wakes never suppress another's first step in.
  */
 
+import { OFFSET_X, OFFSET_Y, OFFSET_Z } from '../camera/exploreRig'
+
 export const MAX_WATER_DISTURBANCES = 6
 /** World-space gap between wake stamps for the same unit. */
 export const MIN_WATER_RIPPLE_SPACING = 1.4
@@ -24,17 +26,14 @@ export type WaterDisturbance = {
 }
 
 /**
- * Matches WorldCamera explore OFFSET_X / OFFSET_Y / OFFSET_Z.
+ * Matches exploreRig OFFSET_X / OFFSET_Y / OFFSET_Z.
  * Water-plane FX at the actor XZ read up the billboard under this isometric perch;
  * pull toward the camera so ripples sit at the soles.
  */
-const ISO_CAM_X = 0.66
-const ISO_CAM_Z = 0.82
-const ISO_CAM_Y = 0.98
-const ISO_CAM_XZ = Math.hypot(ISO_CAM_X, ISO_CAM_Z)
-const ISO_TOWARD_X = ISO_CAM_X / ISO_CAM_XZ
-const ISO_TOWARD_Z = ISO_CAM_Z / ISO_CAM_XZ
-const ISO_SLOPE = ISO_CAM_XZ / ISO_CAM_Y
+const ISO_CAM_XZ = Math.hypot(OFFSET_X, OFFSET_Z)
+const ISO_TOWARD_X = OFFSET_X / ISO_CAM_XZ
+const ISO_TOWARD_Z = OFFSET_Z / ISO_CAM_XZ
+const ISO_SLOPE = ISO_CAM_XZ / OFFSET_Y
 /** Extra pull so rings sit at the soles even when feet are near the surface. */
 const SOLE_BIAS = 0.55
 

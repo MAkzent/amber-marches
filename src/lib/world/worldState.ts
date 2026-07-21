@@ -3,8 +3,10 @@ import { clearAttackSwings, resetCombatRuntime } from './combat'
 import { scenery, walkHeight } from './data/sunmereVale'
 import { riverCenter } from './data/silverrunChannel'
 
-export type DiscoveryId = 'sunfruit' | 'shrine' | 'bridge' | 'villager' | 'watchtower' | 'ascent'
+export type DiscoveryId = 'villager' | 'watchtower'
 export type WeatherMode = 'sunshower' | 'clear' | 'fireflies' | 'snow'
+/** Demo story beats: speak → hunt → return → done. */
+export type QuestPhase = 'speak' | 'hunt' | 'return' | 'done'
 
 export type DialogueLine = {
   speaker: string
@@ -31,7 +33,7 @@ export type ActiveDialogue = {
   ready: boolean
 }
 
-/** Explore = soft isometric follow. Converse = horizontal face shot of an NPC. */
+/** Explore = soft isometric follow. Converse = NPC face shot. Battle = hex board frame. */
 export type CameraMode =
   | { kind: 'explore' }
   | {
@@ -41,6 +43,11 @@ export type CameraMode =
       /** World-space height of the face look-at. */
       faceY: number
     }
+  | {
+      kind: 'battle'
+      /** Board focus feet XZ. */
+      focus: [number, number]
+    }
 
 /** Screen-space anchor for the speech bubble (updated by the camera each frame). */
 export const dialogueAnchor = {
@@ -49,77 +56,78 @@ export const dialogueAnchor = {
   visible: false,
 }
 
+const PRIEST_INTRO_DIALOGUE: DialogueLine[] = [
+  {
+    speaker: 'Mara the Bellkeeper',
+    text: 'Hold a moment, travelers. Something stalks the woods north of the Silverrun — and Sunmere will not sleep while it grows bold.',
+  },
+  {
+    speaker: 'Mara the Bellkeeper',
+    text: 'Cross the river. Find them beyond the bridge, and defeat them. Protect this village.',
+  },
+  {
+    speaker: 'Mara the Bellkeeper',
+    text: 'When the path is clear, return to me. I will see you rewarded.',
+  },
+]
+
+const PRIEST_REWARD_DIALOGUE: DialogueLine[] = [
+  {
+    speaker: 'Mara the Bellkeeper',
+    text: 'You return with the quiet of the woods behind you. Sunmere owes you its thanks.',
+  },
+  {
+    speaker: 'Mara the Bellkeeper',
+    text: 'Take this blessing — small, but sincere. The vale remembers those who stand for it.',
+  },
+]
+
+/** First talk after the pack was already cleared — she notices without a briefing. */
+const PRIEST_RECOGNITION_DIALOGUE: DialogueLine[] = [
+  {
+    speaker: 'Mara the Bellkeeper',
+    text: 'The woods have gone quiet — I felt it before you spoke. You already faced what waited north of the Silverrun.',
+  },
+  {
+    speaker: 'Mara the Bellkeeper',
+    text: 'Sunmere is safer for your steel. Take this blessing — small, but sincere. The vale remembers those who stand for it.',
+  },
+]
+
 export const discoveries: Discovery[] = [
   {
     id: 'villager',
     eyebrow: 'A voice on the road',
     title: 'The Bellkeeper',
-    description: 'Mara marks the old pilgrim road and asks you to wake its sleeping lights.',
+    description: 'Mara asks you to protect Sunmere from the threat beyond the river.',
     position: [-7, 9],
     radius: 3.4,
     action: 'Speak',
     portrait: '/assets/minifantasy/heroes/cleric/idle.png',
-    dialogue: [
-      {
-        speaker: 'Mara the Bellkeeper',
-        text: 'Hold a moment, traveler. The bells of Sunmere have gone quiet… and quiet never means peace here.',
-      },
-      {
-        speaker: 'Mara the Bellkeeper',
-        text: 'Lanterns once lit the pilgrim road — shrinewood west, Larkspur Watch east. Wake those sleeping lights.',
-      },
-      {
-        speaker: 'Mara the Bellkeeper',
-        text: 'Do that, and the vale will remember your name. The Amber Marches still keep their promises.',
-      },
-    ],
-  },
-  {
-    id: 'sunfruit',
-    eyebrow: 'Forage',
-    title: 'Sunmere Rowan',
-    description: 'A honey-bright cluster, warm even beneath the shade.',
-    position: [15, 13],
-    radius: 2.5,
-    action: 'Gather',
-  },
-  {
-    id: 'bridge',
-    eyebrow: 'Vista discovered',
-    title: 'The Silverrun',
-    description: 'From here the vale opens: shrinewood west, watchtower east.',
-    position: [6, riverCenter(6)],
-    radius: 3.2,
-    action: 'Take in the view',
-  },
-  {
-    id: 'shrine',
-    eyebrow: 'Old magic',
-    title: 'Shrine of Small Mercies',
-    description: 'The weathered stones answer with a patient gold light.',
-    position: [-20, -16],
-    radius: 3.1,
-    action: 'Awaken',
+    dialogue: PRIEST_INTRO_DIALOGUE,
   },
   {
     id: 'watchtower',
     eyebrow: 'Landmark restored',
     title: 'Larkspur Watch',
-    description: 'Its beacon carries across the valley. The pilgrim road is whole again.',
+    description: 'The banner catches the last light. Evening settles gently over the vale.',
     position: [22, -22],
     radius: 3.6,
     action: 'Raise the banner',
   },
-  {
-    id: 'ascent',
-    eyebrow: 'Forgotten path',
-    title: 'The Whispering Ascent',
-    description: 'Stone steps climb into pale mist. Something old still listens at the top.',
-    position: [-17.6, -26.8],
-    radius: 3.2,
-    action: 'Listen',
-  },
 ]
+
+function priestDialogueForPhase(phase: QuestPhase): DialogueLine[] | null {
+  if (phase === 'speak') {
+    return get(questPackCleared) ? PRIEST_RECOGNITION_DIALOGUE : PRIEST_INTRO_DIALOGUE
+  }
+  if (phase === 'return') return PRIEST_REWARD_DIALOGUE
+  return null
+}
+
+export function priestInteractable(phase: QuestPhase = get(questPhase)): boolean {
+  return phase === 'speak' || phase === 'return'
+}
 
 const treeOcclusionAnchor = scenery
   .filter((point) => point.kind === 'oak' || point.kind === 'pine')
@@ -135,7 +143,8 @@ const artStartLocations: Record<string, [number, number]> = {
   shrine: [-17.1, -16],
   watchtower: [18.8, -22],
   ascent: [-11.2, -17.0],
-  combat: [8.9, 19.9],
+  /** Encounter approach — dedicated visual-test start, just outside the pack. */
+  combat: [1.7, -17.2],
   trees: treeOcclusionStart,
 }
 const artStart =
@@ -176,6 +185,13 @@ export const cameraMode = writable<CameraMode>({ kind: 'explore' })
 export const introVisible = writable(true)
 export const audioEnabled = writable(false)
 export const reducedMotion = writable(false)
+export const questPhase = writable<QuestPhase>('speak')
+/** True once the hex pack is defeated (even before Mara’s briefing). */
+export const questPackCleared = writable(false)
+/** Demo-end reward card after returning to Mara. */
+export const demoEndVisible = writable(false)
+/** Soft gold glow at Mara after the reward dialogue. */
+export const questRewardGlow = writable(false)
 export type GraphicsTier = 'desktop' | 'mobile'
 
 /** Coarse pointer / touch phones — lower GPU budget (post-FX, grass, particles). */
@@ -233,32 +249,58 @@ export function tickCombatLive(delta: number, instant = false) {
   if (Math.abs(combatLive.intensity - target) < 0.001) combatLive.intensity = target
 }
 
-export const discoveryCount = derived(completedDiscoveries, ($completed) => $completed.size)
-export const objective = derived(completedDiscoveries, ($completed) => {
-  if (!$completed.has('villager')) return 'Follow the lantern road into Sunmere'
-  if (!$completed.has('shrine') || !$completed.has('watchtower')) return 'Wake the two lights beyond the Silverrun'
-  return 'Return to the vale when you are ready'
+/** Called when the hex pack is cleared — advances hunt → return, or flags early clears. */
+export function notifyQuestPackCleared() {
+  questPackCleared.set(true)
+  if (get(questPhase) === 'hunt') {
+    questPhase.set('return')
+  }
+}
+
+export const objective = derived([questPhase, questPackCleared], ([$phase, $cleared]) => {
+  switch ($phase) {
+    case 'speak':
+      return $cleared
+        ? 'Tell Mara you cleared the woods to the north'
+        : 'Speak with Mara in the village'
+    case 'hunt':
+      return 'Cross the Silverrun and defeat the pack to the north'
+    case 'return':
+      return 'Return to Mara for your reward'
+    case 'done':
+      return 'Demo complete — feel free to explore'
+  }
 })
 
-export const questSteps = derived(completedDiscoveries, ($completed) => [
+export const questSteps = derived([questPhase, questPackCleared], ([$phase, $cleared]) => [
   {
-    id: 'villager' as const,
-    label: 'Speak with the Bellkeeper',
-    done: $completed.has('villager'),
+    id: 'speak' as const,
+    label: 'Speak with Mara',
+    done: $phase !== 'speak',
+    // After an early clear, the active beat is reporting — not the briefing.
+    current: $phase === 'speak' && !$cleared,
   },
   {
-    id: 'shrine' as const,
-    label: 'Awaken the Shrine of Small Mercies',
-    done: $completed.has('shrine'),
+    id: 'hunt' as const,
+    label: 'Defeat the threat beyond the river',
+    done: $cleared || $phase === 'return' || $phase === 'done',
+    current: $phase === 'hunt',
   },
   {
-    id: 'watchtower' as const,
-    label: 'Raise the banner at Larkspur Watch',
-    done: $completed.has('watchtower'),
+    id: 'return' as const,
+    label: $phase === 'speak' && $cleared ? 'Report to Mara' : 'Return to Mara',
+    done: $phase === 'done',
+    current: $phase === 'return' || ($phase === 'speak' && $cleared),
   },
 ])
 
+let demoEndTimer: ReturnType<typeof setTimeout> | undefined
 let toastTimer: ReturnType<typeof setTimeout> | undefined
+
+function discoveryAvailable(discovery: Discovery): boolean {
+  if (discovery.id === 'villager') return priestInteractable()
+  return !get(completedDiscoveries).has(discovery.id)
+}
 
 export function updateNearby(x: number, z: number) {
   if (get(activeDialogue)) {
@@ -266,10 +308,9 @@ export function updateNearby(x: number, z: number) {
     return
   }
 
-  const completed = get(completedDiscoveries)
   const candidate =
     discoveries
-      .filter((discovery) => !completed.has(discovery.id))
+      .filter(discoveryAvailable)
       .map((discovery) => ({
         discovery,
         distance: Math.hypot(discovery.position[0] - x, discovery.position[1] - z),
@@ -297,9 +338,46 @@ function finishDiscovery(discovery: Discovery) {
   }
 }
 
+function grantDemoReward() {
+  questPhase.set('done')
+  questRewardGlow.set(true)
+  demoEndVisible.set(true)
+  clearTimeout(demoEndTimer)
+  demoEndTimer = setTimeout(() => demoEndVisible.set(false), 7200)
+}
+
+function markVillagerSpoken() {
+  completedDiscoveries.update((current) => {
+    const next = new Set(current)
+    next.add('villager')
+    return next
+  })
+}
+
+function finishPriestDialogue() {
+  const phase = get(questPhase)
+  nearbyDiscovery.set(null)
+
+  if (phase === 'speak') {
+    markVillagerSpoken()
+    // Pack already cleared before the briefing — recognition talk ends the demo.
+    if (get(questPackCleared)) {
+      grantDemoReward()
+      return
+    }
+    questPhase.set('hunt')
+    return
+  }
+
+  if (phase === 'return') {
+    markVillagerSpoken()
+    grantDemoReward()
+  }
+}
+
 export function startDialogue(discovery: Discovery) {
-  if (!discovery.dialogue?.length) {
-    finishDiscovery(discovery)
+  const lines = priestDialogueForPhase(get(questPhase))
+  if (!lines?.length) {
     return
   }
   nearbyDiscovery.set(null)
@@ -310,7 +388,11 @@ export function startDialogue(discovery: Discovery) {
     faceY: walkHeight(fx, fz) + 2.55,
   })
   dialogueAnchor.visible = false
-  activeDialogue.set({ discovery, lineIndex: 0, ready: false })
+  activeDialogue.set({
+    discovery: { ...discovery, dialogue: lines },
+    lineIndex: 0,
+    ready: false,
+  })
 }
 
 /** Called by the camera once the converse framing has settled. */
@@ -327,11 +409,10 @@ export function advanceDialogue() {
   const lines = session.discovery.dialogue ?? []
   const nextIndex = session.lineIndex + 1
   if (nextIndex >= lines.length) {
-    const discovery = session.discovery
     activeDialogue.set(null)
     cameraMode.set({ kind: 'explore' })
     dialogueAnchor.visible = false
-    finishDiscovery(discovery)
+    finishPriestDialogue()
     return
   }
 
@@ -349,12 +430,19 @@ export function completeNearby() {
   const discovery = get(nearbyDiscovery)
   if (!discovery) return
 
-  if (discovery.dialogue?.length) {
+  if (discovery.id === 'villager' && priestInteractable()) {
     startDialogue(discovery)
     return
   }
 
-  finishDiscovery(discovery)
+  if (discovery.id === 'watchtower') {
+    finishDiscovery(discovery)
+  }
+}
+
+export function dismissDemoEnd() {
+  demoEndVisible.set(false)
+  clearTimeout(demoEndTimer)
 }
 
 export function resetWorld() {
@@ -381,4 +469,10 @@ export function resetWorld() {
   dusk.set(false)
   weatherMode.set('sunshower')
   introVisible.set(true)
+  questPhase.set('speak')
+  questPackCleared.set(false)
+  demoEndVisible.set(false)
+  questRewardGlow.set(false)
+  clearTimeout(demoEndTimer)
+  clearTimeout(toastTimer)
 }

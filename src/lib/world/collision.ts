@@ -1,3 +1,4 @@
+import { applySpanRails } from './build/crossings'
 import {
   WORLD_BOUNDS,
   collisionCircles,
@@ -132,6 +133,8 @@ export function resolveFreePosition(
   pos = pushOutOfRiver(pos.x, pos.z, radius)
   pos = separateFromColliders(pos.x, pos.z, radius, colliders)
   if (riverBlocksMovement(pos.x, pos.z, radius)) pos = pushOutOfRiver(pos.x, pos.z, radius)
+  // On-deck clamp only (from === to): keep followers from drifting past parapets.
+  pos = applySpanRails(pos.x, pos.z, pos.x, pos.z, radius)
   return clampToWorldBounds(pos.x, pos.z, radius)
 }
 
@@ -173,7 +176,8 @@ export function moveWithCollision(
       return { x: fromX, z: fromZ }
     }
 
-    const cleared = pushOutOfRiver(separated.x, separated.z, radius)
+    const railed = applySpanRails(fromX, fromZ, separated.x, separated.z, radius)
+    const cleared = pushOutOfRiver(railed.x, railed.z, radius)
     if (riverBlocksMovement(cleared.x, cleared.z, radius)) return { x: fromX, z: fromZ }
     return cleared
   }

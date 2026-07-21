@@ -7,6 +7,7 @@
     LineSegments,
   } from 'three'
   import { reducedMotion } from '../worldState'
+  import RainImpacts from './RainImpacts.svelte'
   import RetroSky from './RetroSky.svelte'
   import Weather from './Weather.svelte'
   import Wind from './Wind.svelte'
@@ -50,3 +51,4 @@
 <T is={birds} />
 <Wind />
 <Weather />
+<RainImpacts />

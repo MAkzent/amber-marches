@@ -20,6 +20,7 @@
   import { calculatePixelGrid } from './pixelGrid'
   import { createSoftTiltShiftEffect } from './softTiltShift'
   import { combatImpact } from '../combat'
+  import { battleHud } from '../battle'
 
   const isMobile = get(graphicsTier) === 'mobile'
 
@@ -222,7 +223,10 @@
       lightingPass.mainCamera = camera.current
       gradePass.mainCamera = camera.current
 
-      const wantConverse = get(cameraMode).kind === 'converse' ? 1 : 0
+      const modeKind = get(cameraMode).kind
+      const wantConverse = modeKind === 'converse' ? 1 : 0
+      // Hex battle: light vignette only — board stays open, not crushed.
+      const wantBattle = get(battleHud).stageBlend * 0.22
       if (combatImpact.serial !== impactSerial) {
         impactSerial = combatImpact.serial
         impactFlash = $reducedMotion ? 0.14 : 0.7 * combatImpact.strength
@@ -230,14 +234,15 @@
       impactFlash *= Math.pow(0.00008, delta)
       bloom.intensity = (isMobile || $reducedMotion ? 0.34 : 0.52) + impactFlash * 0.28
       if ($reducedMotion) {
-        converseVignette = wantConverse
+        converseVignette = Math.max(wantConverse, wantBattle)
       } else {
-        const ease = 1 - Math.pow(wantConverse > 0.5 ? 0.05 : 0.009, delta)
-        converseVignette += (wantConverse - converseVignette) * ease
-        if (Math.abs(converseVignette - wantConverse) < 0.001) converseVignette = wantConverse
+        const target = Math.max(wantConverse, wantBattle)
+        const ease = 1 - Math.pow(target > 0.5 ? 0.05 : 0.009, delta)
+        converseVignette += (target - converseVignette) * ease
+        if (Math.abs(converseVignette - target) < 0.001) converseVignette = target
       }
 
-      // Same soft vignette for combat zoom and chat converse framing.
+      // Soft vignette for combat zoom, hex battle stage, and chat framing.
       const focusMix =
         Math.max(combatLive.intensity, converseVignette) * ($reducedMotion ? 0.55 : 1)
       vignette.darkness =

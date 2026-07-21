@@ -5,7 +5,16 @@ import {
   sampleAscent,
   type AscentSample,
 } from './mysteriousStairs'
-import { SILVERRUN_SPAN, onSpanDeck, spanDeckBlend, spanDeckHeight, spanYawFromAxis } from '../build/crossings'
+import {
+  SILVERRUN_SPAN,
+  onSpanDeck,
+  spanAbutments,
+  spanDeckBlend,
+  spanDeckHeight,
+  spanPerp,
+  spanYawFromAxis,
+  type BridgeSpan,
+} from '../build/crossings'
 import { buildSnappedRoadNetwork } from '../build/snap'
 import {
   RIVER_HALF_WIDTH,
@@ -331,6 +340,112 @@ export function sampleRoadCenterline(
   samples.push([last[0], last[1]])
   return samples
 }
+
+/** How far lanterns sit off the road centerline (outside dirt half-width). */
+export const LANTERN_ROAD_SHOULDER = 1.65
+/** Min spacing between pilgrim lanterns along / across branches. */
+export const LANTERN_SPACING = 7.25
+/**
+ * Keep roadside lanterns off the stone span — Silverrun posts light the deck.
+ * Expanded past the walk rectangle so poles don't plant in the channel apron.
+ */
+export const LANTERN_BRIDGE_CLEARANCE = 1.15
+/** Extra dry-ground margin beyond the water edge (world units). */
+export const LANTERN_WATER_CLEARANCE = 0.55
+
+/** True when a lamp foot can stand here without reading as mid-channel. */
+export function isDryLanternGround(x: number, z: number) {
+  if (onSpanDeck(SILVERRUN_SPAN, x, z, LANTERN_BRIDGE_CLEARANCE)) return false
+  const river = sampleRiver(x, z)
+  return river.distance >= river.waterHalfWidth + LANTERN_WATER_CLEARANCE
+}
+
+/**
+ * Place pilgrim / shrine-branch lanterns on dry road shoulders.
+ * Samples snapped centerlines so crossings never drop poles into open water.
+ */
+export function buildPilgrimLanterns(
+  paths: Array<Array<[number, number]>> = roadPaths.slice(0, 2),
+): Array<[number, number]> {
+  const placed: Array<[number, number]> = []
+
+  const tooClose = (x: number, z: number) =>
+    placed.some(([px, pz]) => Math.hypot(px - x, pz - z) < LANTERN_SPACING)
+
+  for (let pathIndex = 0; pathIndex < paths.length; pathIndex += 1) {
+    const samples = sampleRoadCenterline(paths[pathIndex], 0.5)
+    // Prefer the outside of the Y-junction: pilgrim south (+Z), shrine north (−Z).
+    const preferredSide = pathIndex === 0 ? 1 : -1
+
+    for (let i = 1; i < samples.length - 1; i += 1) {
+      const [x, z] = samples[i]
+      // Anchor must itself be dry so the road sample isn't mid-channel.
+      if (!isDryLanternGround(x, z)) continue
+
+      const [ax, az] = samples[i - 1]
+      const [bx, bz] = samples[i + 1]
+      const tx = bx - ax
+      const tz = bz - az
+      const len = Math.hypot(tx, tz)
+      if (len < 1e-6) continue
+      const nx = -tz / len
+      const nz = tx / len
+
+      let best: [number, number] | null = null
+      for (const side of [preferredSide, -preferredSide]) {
+        const lx = x + nx * side * LANTERN_ROAD_SHOULDER
+        const lz = z + nz * side * LANTERN_ROAD_SHOULDER
+        if (!isDryLanternGround(lx, lz)) continue
+        if (tooClose(lx, lz)) continue
+        best = [lx, lz]
+        break
+      }
+      if (!best) continue
+      placed.push(best)
+    }
+  }
+
+  return placed
+}
+
+/** Roadside lanterns after Mara wakes the pilgrim road. */
+export const pilgrimLanterns: Array<[number, number]> = buildPilgrimLanterns()
+
+/**
+ * How far shrine lamps sit past each abutment along the span axis.
+ * Must clear LANTERN_BRIDGE_CLEARANCE so feet read as bank approach, not deck.
+ */
+export const BRIDGE_APPROACH_OUTWARD = 1.3
+
+/**
+ * Paired tōrō positions flanking both Silverrun approaches (before / after the span).
+ */
+export function buildBridgeApproachLanterns(
+  span: BridgeSpan = SILVERRUN_SPAN,
+): Array<[number, number]> {
+  const [px, pz] = spanPerp(span)
+  const placed: Array<[number, number]> = []
+
+  for (const [ax, az] of spanAbutments(span)) {
+    const dx = ax - span.x
+    const dz = az - span.z
+    const len = Math.hypot(dx, dz)
+    const ox = len > 1e-6 ? dx / len : span.axisX
+    const oz = len > 1e-6 ? dz / len : span.axisZ
+
+    for (const side of [-1, 1] as const) {
+      const x = ax + ox * BRIDGE_APPROACH_OUTWARD + px * side * LANTERN_ROAD_SHOULDER
+      const z = az + oz * BRIDGE_APPROACH_OUTWARD + pz * side * LANTERN_ROAD_SHOULDER
+      if (!isDryLanternGround(x, z)) continue
+      placed.push([x, z])
+    }
+  }
+
+  return placed
+}
+
+/** Always-on shrine lamps at Silverrun bank approaches. */
+export const bridgeApproachLanterns: Array<[number, number]> = buildBridgeApproachLanterns()
 
 export const scenery: SceneryPoint[] = []
 

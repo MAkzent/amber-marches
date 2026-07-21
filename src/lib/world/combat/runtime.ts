@@ -109,6 +109,11 @@ export function publishCombatHud(enemies: CombatHudEnemy[]) {
   })
 }
 
+/** Drop overworld nameplates / floaters — used when battle owns the field or the pack is cleared. */
+export function clearCombatHudVitals() {
+  combatHud.set({ enemies: [], damage: [] })
+}
+
 export function requestAbilitySlot(slot: number) {
   if (!abilityInput.requestedSlots.includes(slot)) abilityInput.requestedSlots.push(slot)
 }

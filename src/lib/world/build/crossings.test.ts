@@ -2,12 +2,16 @@ import { describe, expect, it } from 'vitest'
 import {
   BRIDGE_SPANS,
   SILVERRUN_SPAN,
+  applySpanRails,
+  fromSpanLocal,
   onSpanCrossingStrip,
   onSpanDeck,
+  projectOntoSpan,
   snapBridgeToRiver,
   spanAbutments,
   spanDeckBlend,
   spanDeckHeightAlong,
+  spanWalkHalfWidth,
   spanWaterShadowFactor,
   spanYawFromAxis,
 } from './crossings'
@@ -76,6 +80,43 @@ describe('bridge crossings', () => {
     expect(spanDeckBlend(SILVERRUN_SPAN, SILVERRUN_SPAN.x, SILVERRUN_SPAN.z)).toBeCloseTo(1, 5)
     const [a] = spanAbutments(SILVERRUN_SPAN)
     expect(spanDeckBlend(SILVERRUN_SPAN, a[0], a[1])).toBeCloseTo(0, 5)
+  })
+
+  it('keeps full deck blend across the walk corridor (no parapet height cliff)', () => {
+    const walkHalf = spanWalkHalfWidth(SILVERRUN_SPAN)
+    const nearRail = fromSpanLocal(SILVERRUN_SPAN, 0, walkHalf - 0.05)
+    expect(spanDeckBlend(SILVERRUN_SPAN, nearRail.x, nearRail.z)).toBeCloseTo(1, 5)
+    const pastRail = fromSpanLocal(SILVERRUN_SPAN, 0, walkHalf + 0.05)
+    expect(spanDeckBlend(SILVERRUN_SPAN, pastRail.x, pastRail.z)).toBe(0)
+  })
+
+  it('clamps on-deck sideways moves inside the walk corridor', () => {
+    const walkHalf = spanWalkHalfWidth(SILVERRUN_SPAN)
+    const from = fromSpanLocal(SILVERRUN_SPAN, 0, 0)
+    const towardRail = fromSpanLocal(SILVERRUN_SPAN, 0, walkHalf + 0.8)
+    const railed = applySpanRails(from.x, from.z, towardRail.x, towardRail.z, 0.65)
+    const across = Math.abs(projectOntoSpan(SILVERRUN_SPAN, railed.x, railed.z).across)
+    expect(across).toBeLessThanOrEqual(walkHalf)
+    expect(across).toBeLessThan(Math.abs(projectOntoSpan(SILVERRUN_SPAN, towardRail.x, towardRail.z).across))
+  })
+
+  it('blocks mid-span side entry onto the deck', () => {
+    const walkHalf = spanWalkHalfWidth(SILVERRUN_SPAN)
+    const from = fromSpanLocal(SILVERRUN_SPAN, 0, walkHalf + 0.6)
+    const into = fromSpanLocal(SILVERRUN_SPAN, 0, 0)
+    const railed = applySpanRails(from.x, from.z, into.x, into.z, 0.65)
+    const across = Math.abs(projectOntoSpan(SILVERRUN_SPAN, railed.x, railed.z).across)
+    expect(across).toBeGreaterThan(walkHalf)
+  })
+
+  it('allows mounting the deck from the bank approaches', () => {
+    const walkHalf = spanWalkHalfWidth(SILVERRUN_SPAN)
+    const along = SILVERRUN_SPAN.halfLength + SILVERRUN_SPAN.approachLength * 0.5
+    const from = fromSpanLocal(SILVERRUN_SPAN, along, walkHalf + 0.5)
+    const into = fromSpanLocal(SILVERRUN_SPAN, along, 0)
+    const railed = applySpanRails(from.x, from.z, into.x, into.z, 0.65)
+    const across = Math.abs(projectOntoSpan(SILVERRUN_SPAN, railed.x, railed.z).across)
+    expect(across).toBeLessThanOrEqual(walkHalf)
   })
 
   it('uses one crowned deck profile for geometry and walk height', () => {

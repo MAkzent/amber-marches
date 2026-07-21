@@ -2,45 +2,41 @@ import { get } from 'svelte/store'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   activeDialogue,
-  activeToast,
   advanceDialogue,
   cameraMode,
   combatLive,
   completedDiscoveries,
   completeNearby,
+  demoEndVisible,
   detectGraphicsTier,
   discoveries,
   dusk,
   markDialogueReady,
   nearbyDiscovery,
+  notifyQuestPackCleared,
+  objective,
   pulseCombat,
+  questPhase,
+  questRewardGlow,
+  questSteps,
   resetWorld,
-  startDialogue,
   tickCombatLive,
+  weatherMode,
 } from './worldState'
 
-describe('world discovery mutations', () => {
+describe('demo quest', () => {
   beforeEach(resetWorld)
 
-  it('persists each discovery and turns the watchtower into dusk', () => {
-    for (const discovery of discoveries) {
-      if (discovery.dialogue?.length) {
-        startDialogue(discovery)
-        markDialogueReady()
-        while (get(activeDialogue)) advanceDialogue()
-      } else {
-        nearbyDiscovery.set(discovery)
-        completeNearby()
-      }
-    }
-
-    expect(get(completedDiscoveries)).toEqual(new Set(discoveries.map((discovery) => discovery.id)))
-    expect(get(dusk)).toBe(true)
+  it('starts at speak with the Defend Sunmere objective', () => {
+    expect(get(questPhase)).toBe('speak')
+    expect(get(objective)).toMatch(/Speak with Mara/i)
+    expect(get(questSteps).map((step) => step.id)).toEqual(['speak', 'hunt', 'return'])
+    expect(get(questSteps)[0]?.current).toBe(true)
   })
 
-  it('frames the Bellkeeper with the camera before dialogue advances', () => {
+  it('frames Mara before dialogue advances, then moves to hunt', () => {
     const villager = discoveries.find((discovery) => discovery.id === 'villager')
-    expect(villager?.dialogue?.length).toBeGreaterThan(0)
+    expect(villager).toBeTruthy()
 
     nearbyDiscovery.set(villager!)
     completeNearby()
@@ -48,7 +44,7 @@ describe('world discovery mutations', () => {
     expect(get(activeDialogue)?.discovery.id).toBe('villager')
     expect(get(activeDialogue)?.ready).toBe(false)
     expect(get(cameraMode).kind).toBe('converse')
-    expect(get(completedDiscoveries).has('villager')).toBe(false)
+    expect(get(questPhase)).toBe('speak')
 
     advanceDialogue()
     expect(get(activeDialogue)?.lineIndex).toBe(0)
@@ -56,15 +52,77 @@ describe('world discovery mutations', () => {
     markDialogueReady()
     expect(get(activeDialogue)?.ready).toBe(true)
 
-    advanceDialogue()
-    expect(get(activeDialogue)?.lineIndex).toBe(1)
+    while (get(activeDialogue)) advanceDialogue()
+
+    expect(get(questPhase)).toBe('hunt')
+    expect(get(completedDiscoveries).has('villager')).toBe(true)
+    expect(get(objective)).toMatch(/defeat the pack to the north/i)
+    expect(get(activeDialogue)).toBeNull()
+    expect(get(cameraMode).kind).toBe('explore')
+  })
+
+  it('does not keep Mara interactable during the hunt', () => {
+    questPhase.set('hunt')
+    nearbyDiscovery.set(discoveries[0]!)
+    // updateNearby would clear her; completeNearby should also no-op once phase is hunt.
+    completeNearby()
+    expect(get(activeDialogue)).toBeNull()
+    expect(get(questPhase)).toBe('hunt')
+  })
+
+  it('advances hunt → return when the pack is cleared', () => {
+    questPhase.set('hunt')
+    notifyQuestPackCleared()
+    expect(get(questPhase)).toBe('return')
+    expect(get(objective)).toMatch(/Return to Mara/i)
+  })
+
+  it('recognizes an early pack clear before the briefing', () => {
+    expect(get(questPhase)).toBe('speak')
+    notifyQuestPackCleared()
+
+    expect(get(questPhase)).toBe('speak')
+    expect(get(objective)).toMatch(/Tell Mara you cleared/i)
+    expect(get(questSteps).find((step) => step.id === 'hunt')?.done).toBe(true)
+    expect(get(questSteps).find((step) => step.id === 'return')?.current).toBe(true)
+
+    nearbyDiscovery.set(discoveries[0]!)
+    completeNearby()
+    markDialogueReady()
+
+    const firstLine = get(activeDialogue)?.discovery.dialogue?.[0]?.text ?? ''
+    expect(firstLine).toMatch(/already faced/i)
 
     while (get(activeDialogue)) advanceDialogue()
 
-    expect(get(completedDiscoveries).has('villager')).toBe(true)
-    expect(get(activeToast)?.id).toBe('villager')
-    expect(get(activeDialogue)).toBeNull()
-    expect(get(cameraMode).kind).toBe('explore')
+    expect(get(questPhase)).toBe('done')
+    expect(get(questRewardGlow)).toBe(true)
+    expect(get(demoEndVisible)).toBe(true)
+  })
+
+  it('grants the demo-end reward after the return dialogue', () => {
+    questPhase.set('return')
+    nearbyDiscovery.set(discoveries[0]!)
+    completeNearby()
+    markDialogueReady()
+    while (get(activeDialogue)) advanceDialogue()
+
+    expect(get(questPhase)).toBe('done')
+    expect(get(questRewardGlow)).toBe(true)
+    expect(get(demoEndVisible)).toBe(true)
+    expect(get(objective)).toMatch(/feel free to explore/i)
+  })
+
+  it('raises the Larkspur Watch banner into dusk and fireflies', () => {
+    const tower = discoveries.find((discovery) => discovery.id === 'watchtower')
+    expect(tower).toBeTruthy()
+
+    nearbyDiscovery.set(tower!)
+    completeNearby()
+
+    expect(get(completedDiscoveries).has('watchtower')).toBe(true)
+    expect(get(dusk)).toBe(true)
+    expect(get(weatherMode)).toBe('fireflies')
   })
 })
 

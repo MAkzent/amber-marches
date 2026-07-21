@@ -16,6 +16,7 @@
   import { walkHeight } from '../data/sunmereVale'
   import { combatImpact } from '../combat'
   import { partyLive, playerLive, reducedMotion } from '../worldState'
+  import { isLootCollectable } from '../battle'
   import { createPseudo3DSprite, type Pseudo3DSprite } from '../actors/pseudo3dSprite'
   import { LOOT_ITEMS, type LootItemId } from './catalog'
   import {
@@ -158,6 +159,7 @@
       playerLive.z,
       walkHeight,
       heroGround,
+      { collectable: isLootCollectable() },
     )
     for (const event of dissolved) {
       emitDissolve(event.x, event.y, event.z)
